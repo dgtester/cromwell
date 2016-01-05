@@ -4,34 +4,31 @@ import java.sql.SQLException
 import java.util.UUID
 
 import cromwell.CromwellTestkitSpec.TestWorkflowManagerSystem
-import cromwell.engine.backend.runtimeattributes.CromwellRuntimeAttributes
-import cromwell.engine.{CallOutput, CallOutputs}
-import wdl4s._
-import wdl4s.types.{WdlArrayType, WdlStringType}
-import wdl4s.values.{WdlArray, WdlString}
 import cromwell.engine.ExecutionIndex.ExecutionIndex
-import cromwell.engine._
+import cromwell.engine.Hashing._
+import cromwell.engine.{CallOutputs, _}
 import cromwell.engine.backend.local.{LocalBackend, LocalBackendCall}
-import cromwell.engine.backend.{Backend, CallLogs}
+import cromwell.engine.backend.runtimeattributes.CromwellRuntimeAttributes
+import cromwell.engine.backend.{Backend, BackendType, CallLogs}
 import cromwell.engine.db.slick.SlickDataAccessSpec.{AllowFalse, AllowTrue}
 import cromwell.engine.db.{CallStatus, ExecutionDatabaseKey, LocalCallBackendInfo}
 import cromwell.engine.io.IoInterface
 import cromwell.engine.workflow.{CallKey, ScatterKey, WorkflowOptions}
-import cromwell.engine.backend.BackendType
 import cromwell.util.SampleWdl
 import cromwell.webservice
 import cromwell.webservice.{CallCachingParameters, WorkflowQueryKey, WorkflowQueryParameters}
-import cromwell.webservice.{WorkflowQueryKey, WorkflowQueryParameters}
 import org.joda.time.DateTime
 import org.scalactic.StringNormalizations._
+import org.scalatest.PartialFunctionValues._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Millis, Seconds, Span}
-import org.scalatest.PartialFunctionValues._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import wdl4s.{CallInputs, _}
+import wdl4s.types.{WdlArrayType, WdlStringType}
+import wdl4s.values.{WdlArray, WdlString}
 
 import scala.concurrent.{ExecutionContext, Future}
-import Hashing._
 
 object SlickDataAccessSpec {
   val AllowFalse = Seq(webservice.QueryParameter("allow", "false"))
@@ -146,12 +143,6 @@ class SlickDataAccessSpec extends FlatSpec with Matchers with ScalaFutures with 
           case _ => Future.successful(())
         }
       } yield ()).futureValue
-    }
-
-    it should "setup via liquibase if necessary" in {
-      assume(canConnect || testRequired)
-      if (testDatabase.useLiquibase)
-        testDatabase.setupLiquibase()
     }
 
     it should "create and retrieve the workflow for just reading" in {

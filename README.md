@@ -381,7 +381,6 @@ database {
       db.url = "jdbc:hsqldb:mem:${slick.uniqueSchema};shutdown=false;hsqldb.tx=mvcc"
       db.driver = "org.hsqldb.jdbcDriver"
       driver = "slick.driver.HsqldbDriver$"
-      slick.createSchema = true
     }
     mysql {
       db.url = "jdbc:mysql://localhost:3306/cromwell"
@@ -396,18 +395,6 @@ database {
     ...
   }
 }
-```
-
-To initially populate the tables, use the [Java MySQL Connector](https://dev.mysql.com/downloads/connector/j/) JAR file with [Liquibase](http://www.liquibase.org/) (installable via `brew install liquibase`):
-
-```
-liquibase --driver=com.mysql.jdbc.Driver \
-          --classpath=${HOME}/.ivy2/cache/mysql/mysql-connector-java/jars/mysql-connector-java-5.1.35.jar \
-          --changeLogFile=src/main/migrations/changelog.xml \
-          --url="jdbc:mysql://localhost/cromwell" \
-          --username="root" \
-          --password="" \
-          migrate
 ```
 
 # Backends
