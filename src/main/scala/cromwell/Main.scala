@@ -1,12 +1,9 @@
 package cromwell
 
-import java.io.{File => JFile}
 import java.nio.file.{Files, Path, Paths}
 
 import akka.actor.{Actor, Props, Status}
 import better.files._
-import wdl4s.formatter.{AnsiSyntaxHighlighter, HtmlSyntaxHighlighter, SyntaxFormatter}
-import wdl4s.{AstTools, _}
 import cromwell.engine.WorkflowSourceFiles
 import cromwell.engine.workflow.SingleWorkflowRunnerActor.RunWorkflow
 import cromwell.engine.workflow.{SingleWorkflowRunnerActor, WorkflowOptions}
@@ -14,7 +11,6 @@ import cromwell.instrumentation.Instrumentation.Monitor
 import cromwell.server.{CromwellServer, WorkflowManagerSystem}
 import cromwell.util.FileUtil._
 import org.slf4j.LoggerFactory
-import spray.json._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Await, Promise}
@@ -22,7 +18,7 @@ import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 object Actions extends Enumeration {
-  val Parse, Validate, Highlight, Run, Inputs, Server = Value
+  val Run, Server = Value
 }
 
 object Main extends App {
@@ -91,42 +87,9 @@ class Main private[cromwell](managerSystem: WorkflowManagerSystem) {
   // CromwellServer still doesn't clean up... so => Any
   def runAction(args: Seq[String]): Int = {
     Main.getAction(args) match {
-      case Some(x) if x == Actions.Validate => validate(args.tail)
-      case Some(x) if x == Actions.Highlight => highlight(args.tail)
-      case Some(x) if x == Actions.Inputs => inputs(args.tail)
       case Some(x) if x == Actions.Run => run(args.tail)
-      case Some(x) if x == Actions.Parse => parse(args.tail)
       case Some(x) if x == Actions.Server => runServer(args.tail)
       case _ => usageAndExit()
-    }
-  }
-
-  def validate(args: Seq[String]): Int = {
-    continueIf(args.length == 1) {
-      loadWdl(args.head) { _ => 0 }
-    }
-  }
-
-  def highlight(args: Seq[String]): Int = {
-    continueIf(args.length == 2 && Seq("html", "console").contains(args(1))) {
-      loadWdl(args.head) { namespace =>
-        val formatter = new SyntaxFormatter(if (args(1) == "html") HtmlSyntaxHighlighter else AnsiSyntaxHighlighter)
-        println(formatter.format(namespace))
-        0
-      }
-    }
-  }
-
-  def inputs(args: Seq[String]): Int = {
-    continueIf(args.length == 1) {
-      loadWdl(args.head) { namespace =>
-        import wdl4s.types.WdlTypeJsonFormatter._
-        namespace match {
-          case x: NamespaceWithWorkflow => println(x.workflow.inputs.toJson.prettyPrint)
-          case _ => println("WDL does not have a local workflow")
-        }
-        0
-      }
     }
   }
 
@@ -263,21 +226,7 @@ class Main private[cromwell](managerSystem: WorkflowManagerSystem) {
     } yield WorkflowSourceFiles(wdlSource, inputsJson, workflowOptions)
   }
 
-  /**
-    * Run the workflow options json string through the WorkflowOptions parser.
-    * NOTE: It's possible WorkflowOptions.fromJsonObject is being called twice, first here, and secondly within the
-    * WorkflowActor system.
-    */
-  def parseOptions(workflowOptions: String): Try[String] = {
-    WorkflowOptions.fromJsonObject(workflowOptions.parseJson.asInstanceOf[JsObject]).map(_.asPrettyJson)
-  }
 
-  def parse(args: Seq[String]): Int = {
-    continueIf(args.length == 1) {
-      println(AstTools.getAst(new JFile(args.head)).toPrettyString)
-      0
-    }
-  }
 
   def usageAndExit(): Int = {
     println(
@@ -301,33 +250,6 @@ class Main private[cromwell](managerSystem: WorkflowManagerSystem) {
         |
         |  Starts a web server on port 8000.  See the web server
         |  documentation for more details about the API endpoints.
-        |
-        |parse <WDL file>
-        |
-        |  Compares a WDL file against the grammar and prints out an
-        |  abstract syntax tree if it is valid, and a syntax error
-        |  otherwise.  Note that higher-level AST checks are not done
-        |  via this sub-command and the 'validate' subcommand should
-        |  be used for full validation
-        |
-        |validate <WDL file>
-        |
-        |  Performs full validation of the WDL file including syntax
-        |  and semantic checking
-        |
-        |inputs <WDL file>
-        |
-        |  Print a JSON skeleton file of the inputs needed for this
-        |  workflow.  Fill in the values in this JSON document and
-        |  pass it in to the 'run' subcommand.
-        |
-        |highlight <WDL file> <html|console>
-        |
-        |  Reformats and colorizes/tags a WDL file. The second
-        |  parameter is the output type.  "html" will output the WDL
-        |  file with <span> tags around elements.  "console" mode
-        |  will output colorized text to the terminal
-        |
       """.stripMargin)
     -1
   }
@@ -357,13 +279,4 @@ class Main private[cromwell](managerSystem: WorkflowManagerSystem) {
   }
 
   private[this] def continueIf(valid: => Boolean)(block: => Int): Int = if (valid) block else usageAndExit()
-
-  private[this] def loadWdl(path: String)(f: WdlNamespace => Int): Int = {
-    Try(WdlNamespace.load(new JFile(path))) match {
-      case Success(namespace) => f(namespace)
-      case Failure(t) =>
-        println(t.getMessage)
-        1
-    }
-  }
 }
