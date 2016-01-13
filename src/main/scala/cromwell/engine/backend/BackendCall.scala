@@ -9,6 +9,11 @@ import cromwell.logging.WorkflowLogger
 import wdl4s._
 import wdl4s.expression.WdlStandardLibraryFunctions
 import wdl4s.values.WdlValue
+import cromwell.engine.workflow.BackendCallKey
+import cromwell.engine.{ExecutionEventEntry, ExecutionHash, WorkflowDescriptor}
+import cromwell.engine.CallOutputs
+import cromwell.logging.WorkflowLogger
+import cromwell.engine.Hashing._
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -79,7 +84,7 @@ trait BackendCall {
    * of a BackendCall object that the 'call' would be within the workflow
    */
   def workflowDescriptor: WorkflowDescriptor
-  def key: CallKey
+  def key: BackendCallKey
   def call = key.scope
 
   /**

@@ -12,6 +12,9 @@ import cromwell.engine.io.IoInterface
 import cromwell.engine.io.gcs.{GcsPath, GoogleCloudStorage}
 import cromwell.engine.workflow.{CallKey, WorkflowOptions}
 import cromwell.engine.{WorkflowContext, WorkflowDescriptor, WorkflowEngineFunctions, WorkflowId, _}
+import cromwell.engine.workflow.{BackendCallKey, WorkflowOptions}
+import cromwell.engine.{WorkflowContext, WorkflowDescriptor, WorkflowEngineFunctions, WorkflowId}
+import cromwell.engine._
 import cromwell.util.TryUtil
 import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
@@ -183,7 +186,7 @@ trait SharedFileSystem {
    *    end up with this implementation and thus use it to satisfy their contract with Backend.
    *    This is yuck-tastic and I consider this a FIXME, but not for this refactor
    */
-  def adjustInputPaths(callKey: CallKey,
+  def adjustInputPaths(callKey: BackendCallKey,
                        runtimeAttributes: CromwellRuntimeAttributes,
                        inputs: CallInputs,
                        workflowDescriptor: WorkflowDescriptor): CallInputs = {

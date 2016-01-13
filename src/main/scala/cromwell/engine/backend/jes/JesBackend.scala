@@ -22,7 +22,7 @@ import cromwell.engine.db.ExecutionDatabaseKey
 import cromwell.engine.db.slick.Execution
 import cromwell.engine.io.IoInterface
 import cromwell.engine.io.gcs._
-import cromwell.engine.workflow.{CallKey, WorkflowOptions}
+import cromwell.engine.workflow.{BackendCallKey, WorkflowOptions}
 import cromwell.engine.{AbortRegistrationFunction, CallOutput, CallOutputs, HostInputs, _}
 import cromwell.logging.WorkflowLogger
 import cromwell.util.{AggregatedException, TryUtil}
@@ -71,7 +71,7 @@ object JesBackend {
   // Decoration around WorkflowDescriptor to generate bucket names and the like
   implicit class JesWorkflowDescriptor(val descriptor: WorkflowDescriptor)
     extends JesBackend(CromwellBackend.backend().actorSystem) {
-    def callDir(key: CallKey) = callGcsPath(descriptor, key)
+    def callDir(key: BackendCallKey) = callGcsPath(descriptor, key)
   }
 
   /**
@@ -184,7 +184,7 @@ case class JesBackend(actorSystem: ActorSystem)
 
   // FIXME: Add proper validation of jesConf and have it happen up front to provide fail-fast behavior (will do as a separate PR)
 
-  override def adjustInputPaths(callKey: CallKey,
+  override def adjustInputPaths(callKey: BackendCallKey,
                                 runtimeAttributes: CromwellRuntimeAttributes,
                                 inputs: CallInputs,
                                 workflowDescriptor: WorkflowDescriptor): CallInputs = inputs mapValues gcsPathToLocal
@@ -291,7 +291,7 @@ case class JesBackend(actorSystem: ActorSystem)
   override def stdoutStderr(backendCall: BackendCall): CallLogs = backendCall.stdoutStderr
 
   override def bindCall(workflowDescriptor: WorkflowDescriptor,
-                        key: CallKey,
+                        key: BackendCallKey,
                         locallyQualifiedInputs: CallInputs,
                         abortRegistrationFunction: Option[AbortRegistrationFunction]): BackendCall = {
     new JesBackendCall(this, workflowDescriptor, key, locallyQualifiedInputs, abortRegistrationFunction)

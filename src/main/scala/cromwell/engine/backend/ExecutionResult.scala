@@ -9,6 +9,8 @@ import cromwell.engine.CallOutputs
  */
 sealed trait ExecutionResult
 
+case object SuccessfulFinalCall extends ExecutionResult
+
 /**
  * A successful execution with resolved outputs.
  */

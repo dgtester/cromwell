@@ -11,7 +11,7 @@ import cromwell.engine.backend.jes.Run.TerminalRunStatus
 import cromwell.engine.backend.jes.authentication.ProductionJesAuthentication
 import cromwell.engine.backend.{BackendCall, CallLogs, JobKey, _}
 import cromwell.engine.io.gcs.GcsPath
-import cromwell.engine.workflow.CallKey
+import cromwell.engine.workflow.BackendCallKey
 import cromwell.engine.{AbortRegistrationFunction, CallContext, WorkflowDescriptor, _}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -36,7 +36,7 @@ object JesBackendCall {
 
 class JesBackendCall(val backend: JesBackend,
                      val workflowDescriptor: WorkflowDescriptor,
-                     val key: CallKey,
+                     val key: BackendCallKey,
                      val locallyQualifiedInputs: CallInputs,
                      val callAbortRegistrationFunction: Option[AbortRegistrationFunction])
   extends BackendCall with ProductionJesAuthentication with LazyLogging {

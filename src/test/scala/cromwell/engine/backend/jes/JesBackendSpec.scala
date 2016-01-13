@@ -11,6 +11,8 @@ import cromwell.engine.backend.jes.JesBackend.{JesInput, JesOutput}
 import cromwell.engine.backend.jes.authentication._
 import cromwell.engine.backend.runtimeattributes.CromwellRuntimeAttributes
 import cromwell.engine.io.gcs.{GoogleConfiguration, Refresh, ServiceAccountMode, SimpleClientSecrets}
+import cromwell.engine.workflow.{BackendCallKey, WorkflowOptions}
+import cromwell.util.EncryptionSpec
 import cromwell.engine.workflow.{CallKey, WorkflowOptions}
 import cromwell.engine.{AbortRegistrationFunction, WorkflowDescriptor, WorkflowId}
 import cromwell.util.{EncryptionSpec, SampleWdl}
@@ -59,7 +61,7 @@ class JesBackendSpec extends FlatSpec with Matchers with Mockito with BeforeAndA
   }
 
   "adjustInputPaths" should "map GCS paths and *only* GCS paths to local" in {
-    val ignoredCall = mock[CallKey]
+    val ignoredCall = mock[BackendCallKey]
     val stringKey = "abc"
     val stringVal = WdlString("abc")
     val localFileKey = "lf"

@@ -12,6 +12,8 @@ import cromwell.engine.backend._
 import cromwell.engine.db.DataAccess._
 import cromwell.engine.db.{CallStatus, ExecutionDatabaseKey}
 import cromwell.engine.workflow.CallKey
+import cromwell.engine.workflow.BackendCallKey
+import cromwell.engine.backend.BackendType
 import cromwell.util.FileUtil._
 import org.slf4j.LoggerFactory
 import wdl4s._
@@ -114,7 +116,7 @@ case class LocalBackend(actorSystem: ActorSystem) extends Backend with SharedFil
   import LocalBackend._
 
   override def bindCall(workflowDescriptor: WorkflowDescriptor,
-                        key: CallKey,
+                        key: BackendCallKey,
                         locallyQualifiedInputs: CallInputs,
                         abortRegistrationFunction: Option[AbortRegistrationFunction]): BackendCall = {
     LocalBackendCall(this, workflowDescriptor, key, locallyQualifiedInputs, abortRegistrationFunction)
