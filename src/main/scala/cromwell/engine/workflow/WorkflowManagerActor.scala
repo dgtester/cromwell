@@ -32,26 +32,20 @@ object WorkflowManagerActor {
   class WorkflowNotFoundException(message: String) extends RuntimeException(message)
   class CallNotFoundException(message: String) extends RuntimeException(message)
 
-  sealed trait WorkflowManagerActorMessage {
-    def requestor: ActorRef
-  }
+  sealed trait WorkflowManagerActorMessage
 
-  sealed trait InternalMessage extends WorkflowManagerActorMessage {
-    override def requestor: ActorRef = throw new UnsupportedOperationException("requestor not supported on InternalMessages")
-  }
-
-  case class SubmitWorkflow(source: WorkflowSourceFiles, override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  case class WorkflowStatus(id: WorkflowId, override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  case class WorkflowQuery(parameters: Seq[(String, String)], override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  case class WorkflowOutputs(id: WorkflowId, override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  case class CallOutputs(id: WorkflowId, callFqn: FullyQualifiedName, override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  case class CallStdoutStderr(id: WorkflowId, callFqn: FullyQualifiedName, override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  case class WorkflowStdoutStderr(id: WorkflowId, override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  case class SubscribeToWorkflow(id: WorkflowId, override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  case class WorkflowAbort(id: WorkflowId, override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  final case class WorkflowMetadata(id: WorkflowId, override val requestor: ActorRef) extends WorkflowManagerActorMessage
-  final case class RestartWorkflows(workflows: Seq[WorkflowDescriptor]) extends InternalMessage
-  final case class CallCaching(id: WorkflowId, parameters: QueryParameters, call: Option[String], override val requestor: ActorRef) extends WorkflowManagerActorMessage
+  case class SubmitWorkflow(source: WorkflowSourceFiles) extends WorkflowManagerActorMessage
+  case class WorkflowStatus(id: WorkflowId) extends WorkflowManagerActorMessage
+  case class WorkflowQuery(parameters: Seq[(String, String)]) extends WorkflowManagerActorMessage
+  case class WorkflowOutputs(id: WorkflowId) extends WorkflowManagerActorMessage
+  case class CallOutputs(id: WorkflowId, callFqn: FullyQualifiedName) extends WorkflowManagerActorMessage
+  case class CallStdoutStderr(id: WorkflowId, callFqn: FullyQualifiedName) extends WorkflowManagerActorMessage
+  case class WorkflowStdoutStderr(id: WorkflowId) extends WorkflowManagerActorMessage
+  case class SubscribeToWorkflow(id: WorkflowId) extends WorkflowManagerActorMessage
+  case class WorkflowAbort(id: WorkflowId) extends WorkflowManagerActorMessage
+  final case class WorkflowMetadata(id: WorkflowId) extends WorkflowManagerActorMessage
+  final case class RestartWorkflows(workflows: Seq[WorkflowDescriptor]) extends WorkflowManagerActorMessage
+  final case class CallCaching(id: WorkflowId, parameters: QueryParameters, call: Option[String]) extends WorkflowManagerActorMessage
 
   def props(backend: Backend): Props = Props(new WorkflowManagerActor(backend))
 
@@ -80,39 +74,39 @@ class WorkflowManagerActor(backend: Backend) extends Actor with CromwellActor {
     restartIncompleteWorkflows()
   }
 
-  private def reply[T](future: Future[T], requestor: ActorRef, f: (Try[T], ActorRef) => WorkflowManagerResponse): Unit = {
+  private def reply[T](future: Future[T], f: (Try[T]) => WorkflowManagerResponse): Unit = {
     // Don't close over sender.
     val sndr = sender
     future onComplete {
-      case r => sndr ! f(r, requestor)
+      case r => sndr ! f(r)
     }
   }
 
-  private def reply[T](future: Future[T], id: WorkflowId, requestor: ActorRef, f: (Try[T], WorkflowId, ActorRef) => WorkflowManagerResponse): Unit = {
+  private def reply[T](future: Future[T], id: WorkflowId, f: (Try[T], WorkflowId) => WorkflowManagerResponse): Unit = {
     // Don't close over sender.
     val sndr = sender
     future onComplete {
-      case r => sndr ! f(r, id, requestor)
+      case r => sndr ! f(r, id)
     }
   }
 
   def receive = LoggingReceive {
-    case SubmitWorkflow(source, requestor) => reply(submitWorkflow(source, maybeWorkflowId = None), requestor, WorkflowManagerSubmissionResponse)
-    case WorkflowStatus(id, requestor) => globalDataAccess.getWorkflowState(id) pipeTo sender
-    case WorkflowQuery(rawParameters, requestor) => query(rawParameters) pipeTo sender
-    case WorkflowAbort(id, requestor) =>
+    case SubmitWorkflow(source) => reply(submitWorkflow(source, maybeWorkflowId = None), WorkflowManagerSubmissionResponse)
+    case WorkflowStatus(id) => globalDataAccess.getWorkflowState(id) pipeTo sender
+    case WorkflowQuery(rawParameters) => query(rawParameters) pipeTo sender
+    case WorkflowAbort(id) =>
       workflowStore.toMap.get(id) match {
         case Some(x) =>
           x ! WorkflowActor.AbortWorkflow
           sender ! Some(WorkflowAborting)
         case None => sender ! None
       }
-    case WorkflowOutputs(id, requestor) => reply(workflowOutputs(id), id, requestor, WorkflowManagerOutputsResponse)
-    case CallOutputs(workflowId, callName, requestor) => callOutputs(workflowId, callName) pipeTo sender
-    case CallStdoutStderr(workflowId, callName, requestor) => callStdoutStderr(workflowId, callName) pipeTo sender
-    case WorkflowStdoutStderr(workflowId, requestor) => workflowStdoutStderr(workflowId) pipeTo sender
-    case WorkflowMetadata(workflowId, requestor) => workflowMetadata(workflowId) pipeTo sender
-    case SubscribeToWorkflow(id, requestor) =>
+    case WorkflowOutputs(id) => reply(workflowOutputs(id), id, WorkflowManagerOutputsResponse)
+    case CallOutputs(workflowId, callName) => callOutputs(workflowId, callName) pipeTo sender
+    case CallStdoutStderr(workflowId, callName) => callStdoutStderr(workflowId, callName) pipeTo sender
+    case WorkflowStdoutStderr(workflowId) => workflowStdoutStderr(workflowId) pipeTo sender
+    case WorkflowMetadata(workflowId) => workflowMetadata(workflowId) pipeTo sender
+    case SubscribeToWorkflow(id) =>
       //  NOTE: This fails silently. Currently we're ok w/ this, but you might not be in the future
       workflowStore.toMap.get(id) foreach {_ ! SubscribeTransitionCallBack(sender())}
     case RestartWorkflows(w :: ws) =>
@@ -121,7 +115,7 @@ class WorkflowManagerActor(backend: Backend) extends Actor with CromwellActor {
         self ! RestartWorkflows(ws)
       }
     case RestartWorkflows(Nil) => // No more workflows need restarting.
-    case CallCaching(id, parameters, callName, requestor) => callCaching(id, parameters, callName) pipeTo sender
+    case CallCaching(id, parameters, callName) => callCaching(id, parameters, callName) pipeTo sender
   }
 
   /**

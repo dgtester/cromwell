@@ -59,7 +59,7 @@ case class SingleWorkflowRunnerActor(source: WorkflowSourceFiles,
   startWith(NotStarted, RunnerData())
 
   private def requestMetadata: State = {
-    workflowManager ! WorkflowMetadata(stateData.id.get, null)
+    workflowManager ! WorkflowMetadata(stateData.id.get)
     goto (RequestingMetadata)
   }
 
@@ -71,17 +71,17 @@ case class SingleWorkflowRunnerActor(source: WorkflowSourceFiles,
   when (NotStarted) {
     case Event(RunWorkflow, data) =>
       log.info(s"$tag: launching workflow")
-      workflowManager ! SubmitWorkflow(source, null)
+      workflowManager ! SubmitWorkflow(source)
       goto (RunningWorkflow) using data.copy(replyTo = Option(sender()))
   }
 
   when (RunningWorkflow) {
     case Event(id: WorkflowId, data) =>
       log.info(s"$tag: workflow ID UUID($id)")
-      workflowManager ! SubscribeToWorkflow(id, null)
+      workflowManager ! SubscribeToWorkflow(id)
       stay using data.copy(id = Option(id))
     case Event(Transition(_, _, WorkflowSucceeded), data) =>
-      workflowManager ! WorkflowOutputs(data.id.get, null)
+      workflowManager ! WorkflowOutputs(data.id.get)
       goto(RequestingOutputs) using data.copy(terminalState = Option(WorkflowSucceeded))
     case Event(Transition(_, _, state: WorkflowState), data) if state.isTerminal =>
       // A terminal state that is not `WorkflowSucceeded` is a failure.
