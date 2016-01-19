@@ -1,6 +1,5 @@
 package cromwell.engine.backend.sge
 
-import com.google.api.client.util.ExponentialBackOff
 import cromwell.engine.backend.local.LocalBackend
 import cromwell.engine.backend.{BackendCall, LocalFileSystemBackendCall, _}
 import cromwell.engine.workflow.CallKey
@@ -33,10 +32,8 @@ case class SgeBackendCall(backend: SgeBackend,
 
   override def stdoutStderr: CallLogs = backend.stdoutStderr(this)
 
-  override val pollBackoff = new ExponentialBackOff.Builder()
-    .setInitialIntervalMillis(10.seconds.toMillis.toInt)
-    .setMaxIntervalMillis(1.minute.toMillis.toInt)
-    .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
-    .setMultiplier(1.1)
-    .build()
+  override def pollingInitialInterval: FiniteDuration = 10.seconds
+  override def pollingMaxInterval: FiniteDuration = 10.minutes
+  override def pollingMultiplier: Double = 1.1D
+
 }

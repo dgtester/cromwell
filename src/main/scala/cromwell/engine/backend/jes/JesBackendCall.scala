@@ -3,10 +3,8 @@ package cromwell.engine.backend.jes
 import java.nio.file.Paths
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import com.google.api.client.util.ExponentialBackOff
 import com.typesafe.scalalogging.LazyLogging
-import wdl4s._
-import wdl4s.values.WdlFile
+import cromwell.engine.Hashing._
 import cromwell.engine.backend.jes.JesBackend._
 import cromwell.engine.backend.jes.Run.TerminalRunStatus
 import cromwell.engine.backend.jes.authentication.ProductionJesAuthentication
@@ -14,12 +12,13 @@ import cromwell.engine.backend.{BackendCall, CallLogs, JobKey, _}
 import cromwell.engine.io.gcs.GcsPath
 import cromwell.engine.workflow.CallKey
 import cromwell.engine.{AbortRegistrationFunction, CallContext, WorkflowDescriptor, _}
+import wdl4s._
+import wdl4s.values.WdlFile
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
-import Hashing._
 
 object JesBackendCall {
   def jesLogBasename(key: CallKey) = {
@@ -108,6 +107,7 @@ class JesBackendCall(val backend: JesBackend,
   override def useCachedCall(avoidedTo: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] =
     backend.useCachedCall(avoidedTo.asInstanceOf[JesBackendCall], this)
 
+
   override def stdoutStderr: CallLogs = {
     CallLogs(
       stdout = WdlFile(jesStdoutGcsPath),
@@ -116,11 +116,8 @@ class JesBackendCall(val backend: JesBackend,
     )
   }
 
-  override val pollBackoff = new ExponentialBackOff.Builder()
-    .setInitialIntervalMillis(30.seconds.toMillis.toInt)
-    .setMaxIntervalMillis(2.minutes.toMillis.toInt)
-    .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
-    .setMultiplier(1.1)
-    .build()
+  override def pollingInitialInterval: FiniteDuration = 3.minutes
+  override def pollingMaxInterval: FiniteDuration = 10.minutes
+  override def pollingMultiplier: Double = 1.1D
 
 }

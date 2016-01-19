@@ -11,6 +11,7 @@ import wdl4s._
 import wdl4s.expression.WdlStandardLibraryFunctions
 import wdl4s.values.WdlValue
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -185,10 +186,20 @@ trait BackendCall {
       Future.successful(ExecutionHash("", None))
   }
 
+  def pollingInitialInterval: FiniteDuration
+  def pollingMaxInterval: FiniteDuration
+  def pollingMultiplier: Double
   /**
     * Exponential Backoff to be used when polling for call status.
     */
-  def pollBackoff: ExponentialBackOff
+  final val pollBackoff: ExponentialBackOff = {
+    new ExponentialBackOff.Builder()
+      .setInitialIntervalMillis(pollingInitialInterval.toMillis.toInt)
+      .setMaxIntervalMillis(pollingMaxInterval.toMillis.toInt)
+      .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
+      .setMultiplier(pollingMultiplier)
+      .build()
+  }
 
   /**
    * Using the execution handle from the previous execution, resumption, or polling attempt, poll the execution
