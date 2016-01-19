@@ -2,8 +2,6 @@ package cromwell.engine
 
 import akka.actor.{Actor, Props}
 import akka.event.{Logging, LoggingReceive}
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import com.google.api.client.util.ExponentialBackOff
 import cromwell.engine.backend._
 import cromwell.logging.WorkflowLogger
 
@@ -55,18 +53,11 @@ class CallExecutionActor(backendCall: BackendCall) extends Actor with CromwellAc
    * Schedule work according to the schedule of the `backoff`.
    */
   private def scheduleWork(work: => Unit): Unit = {
-    val interval = backoff.nextBackOffMillis().millis
+    val interval = backendCall.pollBackoff.nextBackOffMillis().millis
     context.system.scheduler.scheduleOnce(interval) {
       work
     }
   }
-
-  private val backoff = new ExponentialBackOff.Builder()
-    .setInitialIntervalMillis(5.seconds.toMillis.toInt)
-    .setMaxIntervalMillis(30.seconds.toMillis.toInt)
-    .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
-    .setMultiplier(1.1)
-    .build()
 
   /**
    * If the `work` `Future` completes successfully, perform the `onSuccess` work, otherwise schedule

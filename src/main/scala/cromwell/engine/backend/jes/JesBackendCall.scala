@@ -3,6 +3,7 @@ package cromwell.engine.backend.jes
 import java.nio.file.Paths
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import com.google.api.client.util.ExponentialBackOff
 import com.typesafe.scalalogging.LazyLogging
 import wdl4s._
 import wdl4s.values.WdlFile
@@ -15,6 +16,7 @@ import cromwell.engine.workflow.CallKey
 import cromwell.engine.{AbortRegistrationFunction, CallContext, WorkflowDescriptor, _}
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 import Hashing._
@@ -113,4 +115,12 @@ class JesBackendCall(val backend: JesBackend,
       Option(Map("log" -> WdlFile(jesLogGcsPath)))
     )
   }
+
+  override val pollBackoff = new ExponentialBackOff.Builder()
+    .setInitialIntervalMillis(30.seconds.toMillis.toInt)
+    .setMaxIntervalMillis(2.minutes.toMillis.toInt)
+    .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
+    .setMultiplier(1.1)
+    .build()
+
 }

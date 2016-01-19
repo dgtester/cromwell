@@ -1,6 +1,7 @@
 package cromwell.engine.backend
 
 import akka.event.LoggingAdapter
+import com.google.api.client.util.ExponentialBackOff
 import cromwell.engine.Hashing._
 import cromwell.engine.backend.runtimeattributes.{ContinueOnReturnCodeFlag, ContinueOnReturnCodeSet, CromwellRuntimeAttributes}
 import cromwell.engine.workflow.CallKey
@@ -183,6 +184,11 @@ trait BackendCall {
     else
       Future.successful(ExecutionHash("", None))
   }
+
+  /**
+    * Exponential Backoff to be used when polling for call status.
+    */
+  def pollBackoff: ExponentialBackOff
 
   /**
    * Using the execution handle from the previous execution, resumption, or polling attempt, poll the execution

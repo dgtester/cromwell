@@ -1,11 +1,13 @@
 package cromwell.engine.backend.local
 
 import better.files._
-import wdl4s.CallInputs
+import com.google.api.client.util.ExponentialBackOff
 import cromwell.engine.backend.{BackendCall, LocalFileSystemBackendCall, _}
 import cromwell.engine.workflow.CallKey
 import cromwell.engine.{AbortRegistrationFunction, CallContext, WorkflowDescriptor}
+import wdl4s.CallInputs
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
 case class LocalBackendCall(backend: LocalBackend,
@@ -37,4 +39,12 @@ case class LocalBackendCall(backend: LocalBackend,
     backend.useCachedCall(avoidedTo.asInstanceOf[LocalBackendCall], this)
 
   override def stdoutStderr: CallLogs = backend.stdoutStderr(this)
+
+  override val pollBackoff = new ExponentialBackOff.Builder()
+    .setInitialIntervalMillis(10.seconds.toMillis.toInt)
+    .setMaxIntervalMillis(1.minute.toMillis.toInt)
+    .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
+    .setMultiplier(1.1)
+    .build()
+
 }

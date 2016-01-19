@@ -1,11 +1,13 @@
 package cromwell.engine.backend.sge
 
-import wdl4s.CallInputs
+import com.google.api.client.util.ExponentialBackOff
 import cromwell.engine.backend.local.LocalBackend
 import cromwell.engine.backend.{BackendCall, LocalFileSystemBackendCall, _}
 import cromwell.engine.workflow.CallKey
 import cromwell.engine.{AbortRegistrationFunction, WorkflowDescriptor}
+import wdl4s.CallInputs
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
 case class SgeBackendCall(backend: SgeBackend,
@@ -30,4 +32,11 @@ case class SgeBackendCall(backend: SgeBackend,
     backend.useCachedCall(avoidedTo.asInstanceOf[SgeBackendCall], this)
 
   override def stdoutStderr: CallLogs = backend.stdoutStderr(this)
+
+  override val pollBackoff = new ExponentialBackOff.Builder()
+    .setInitialIntervalMillis(10.seconds.toMillis.toInt)
+    .setMaxIntervalMillis(1.minute.toMillis.toInt)
+    .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
+    .setMultiplier(1.1)
+    .build()
 }
