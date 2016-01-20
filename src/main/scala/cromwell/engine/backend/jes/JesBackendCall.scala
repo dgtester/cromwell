@@ -115,8 +115,8 @@ class JesBackendCall(val backend: JesBackend,
     )
   }
 
-  override val pollingInitialInterval: FiniteDuration = 1.minute
+  override val pollingInitialInterval: FiniteDuration = 20.seconds
   override val pollingMaxInterval: FiniteDuration = 10.minutes
   override val pollingMultiplier: Double = 1.1D
-  override val pollingInitialGap: FiniteDuration = 3.minutes
+  override val pollingInitialGap: FiniteDuration = 1.minute
 }
