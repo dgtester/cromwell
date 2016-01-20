@@ -11,7 +11,6 @@ import CallExecutionActor._
   * Actor to manage the execution of a single backend call.
   * */
 class BackendCallExecutionActor(backendCall: BackendCall) extends CallExecutionActor {
-
   override val logger = WorkflowLogger(
     this.getClass.getSimpleName,
     backendCall.workflowDescriptor,
@@ -19,9 +18,7 @@ class BackendCallExecutionActor(backendCall: BackendCall) extends CallExecutionA
     callTag = Option(backendCall.key.tag)
   )
   override val call = backendCall.call
-
   override def poll(handle: ExecutionHandle) = backendCall.poll(handle)
-
   override def execute(mode: ExecutionMode) = mode match {
     case Execute => backendCall.execute
     case Resume(jobKey) => backendCall.resume(jobKey)

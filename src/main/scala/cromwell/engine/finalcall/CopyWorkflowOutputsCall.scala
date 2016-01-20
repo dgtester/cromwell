@@ -25,12 +25,12 @@ case class CopyWorkflowOutputsCall(override val workflow: WorkflowDescriptor) ex
     _ => CopyWorkflowOutputsHandle
   }
   override def poll(implicit ec: ExecutionContext, current: ExecutionHandle): Future[ExecutionHandle] = current match {
-    case CopyWorkflowOutputsHandle => Future(CopyWorkflowOutputsHandle)
+    case CopyWorkflowOutputsHandle => Future.successful(CopyWorkflowOutputsHandle)
     case _ => Future.failed(new IllegalStateException("No no no, not like that! Let me do it..."))
   }
 }
 
 case object CopyWorkflowOutputsHandle extends ExecutionHandle {
-  override def isDone = true
-  override def result = SuccessfulFinalCallExecution
+  override val isDone = true
+  override val result = SuccessfulFinalCallExecution
 }

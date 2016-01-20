@@ -1070,7 +1070,6 @@ case class WorkflowActor(workflow: WorkflowDescriptor, backend: Backend)
     }
   }
 
-
   private def processRunnableCall(callKey: CallKey): Try[ExecutionStartResult] = {
     // In the `startRunnableCalls` context, record the call as Starting and initiate persistence.
     // The restart scenario assumes a restartable/resumable call is already in Running.

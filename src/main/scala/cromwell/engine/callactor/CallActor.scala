@@ -81,9 +81,8 @@ object CallActor {
 
 /** Actor to manage the execution of a single call. */
 trait CallActor extends LoggingFSM[CallActorState, CallActorData] with CromwellActor {
-
-  val key: CallKey
-  val workflowDescriptor: WorkflowDescriptor
+  def key: CallKey
+  def workflowDescriptor: WorkflowDescriptor
   protected def callExecutionActor: ActorRef
 
   import CallActor._
