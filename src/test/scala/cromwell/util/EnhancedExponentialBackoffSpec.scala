@@ -22,16 +22,20 @@ class EnhancedExponentialBackoffSpec extends FlatSpec with Matchers {
   }
 
   it should "not break original behavior" in {
-    val exponentialBackoff = {
-      new EnhancedExponentialBackoff.Builder()
-        .setInitialIntervalMillis(1.second.toMillis.toInt)
-        .setMaxIntervalMillis(2.seconds.toMillis.toInt)
-        .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
-        .setRandomizationFactor(0D)
-        .build()
-    }
+    new EnhancedExponentialBackoff.Builder()
+      .setInitialIntervalMillis(1.second.toMillis.toInt)
+      .setMaxIntervalMillis(2.seconds.toMillis.toInt)
+      .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
+      .setRandomizationFactor(0D)
+      .build().nextBackOffMillis() shouldBe 1.second.toMillis.toInt
 
-    exponentialBackoff.nextBackOffMillis() shouldBe 1.second.toMillis.toInt
+    new EnhancedExponentialBackoff.Builder()
+      .setInitialGapMillis(0.seconds.toMillis.toInt)
+      .setInitialIntervalMillis(1.second.toMillis.toInt)
+      .setMaxIntervalMillis(2.seconds.toMillis.toInt)
+      .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
+      .setRandomizationFactor(0D)
+      .build().nextBackOffMillis() shouldBe 1.second.toMillis.toInt
   }
 
 }
