@@ -449,29 +449,7 @@ case class WorkflowActor(workflow: WorkflowDescriptor, backend: Backend)
       stay() using updatedData
     case Event(message: CallStartMessage, data) if !data.isPending(message.callKey) =>
       val updatedData = message.handleStatusPersist(this, data)
-      val callKey = message.callKey
-      callKey match {
-        case backendCallKey: BackendCallKey =>
-          fetchLocallyQualifiedInputs(backendCallKey) match {
-            case Success(callInputs) =>
-              // TODO: The block of code is only run on non-shards because of issues with DSDEEPB-2490
-              if (!callKey.index.isShard) {
-                val updateDbCallInputs = globalDataAccess.updateCallInputs(workflow.id, backendCallKey, callInputs)
-                updateDbCallInputs onComplete {
-                  case Success(i) =>
-                    logger.debug(s"$i call input expression(s) updated in database.")
-                    startActor(callKey, callInputs, message.startMode)
-                  case Failure(e) => self ! AsyncFailure(new SQLException(s"Failed to update symbol inputs for ${callKey.scope.fullyQualifiedName}.${callKey.tag}.${callKey.index}", e))
-                }
-              } else {
-                startActor(callKey, callInputs, message.startMode)
-              }
-            case Failure(t) =>
-              logger.error(s"Failed to fetch locally qualified inputs for call ${callKey.tag}", t)
-              scheduleTransition(WorkflowFailed)
-          }
-        case finalCallKey: FinalCallKey => startActor(finalCallKey, Map.empty, message.startMode)
-      }
+      startCallWithMessage(message)
       stay() using updatedData
     case Event(message: CallStartMessage, _) =>
       resendDueToPendingExecutionWrites(message)
@@ -484,6 +462,32 @@ case class WorkflowActor(workflow: WorkflowDescriptor, backend: Backend)
       if (isWorkflowDone) scheduleTransition(WorkflowSucceeded)
       val finalData = updatedData.removePersisting(callKey, ExecutionStatus.Done)
       stay using finalData
+  }
+
+  private def startCallWithMessage(message: CallStartMessage) = {
+    val callKey = message.callKey
+    callKey match {
+      case backendCallKey: BackendCallKey =>
+        fetchLocallyQualifiedInputs(backendCallKey) match {
+          case Success(callInputs) =>
+            // TODO: The block of code is only run on non-shards because of issues with DSDEEPB-2490
+            if (!callKey.index.isShard) {
+              val updateDbCallInputs = globalDataAccess.updateCallInputs(workflow.id, backendCallKey, callInputs)
+              updateDbCallInputs onComplete {
+                case Success(i) =>
+                  logger.debug(s"$i call input expression(s) updated in database.")
+                  startActor(callKey, callInputs, message.startMode)
+                case Failure(e) => self ! AsyncFailure(new SQLException(s"Failed to update symbol inputs for ${callKey.scope.fullyQualifiedName}.${callKey.tag}.${callKey.index}", e))
+              }
+            } else {
+              startActor(callKey, callInputs, message.startMode)
+            }
+          case Failure(t) =>
+            logger.error(s"Failed to fetch locally qualified inputs for call ${callKey.tag}", t)
+            scheduleTransition(WorkflowFailed)
+        }
+      case finalCallKey: FinalCallKey => startActor(finalCallKey, Map.empty, message.startMode)
+    }
   }
 
   when(WorkflowSucceeded) { FSM.NullFunction }

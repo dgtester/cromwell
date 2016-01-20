@@ -12,16 +12,16 @@ import CallExecutionActor._
 class BackendCallExecutionActor(backendCall: BackendCall) extends CallExecutionActor {
 
   override val logger = WorkflowLogger(
-    "CallExecutionActor",
+    this.getClass.getSimpleName,
     backendCall.workflowDescriptor,
     akkaLogger = Option(akkaLogger),
     callTag = Option(backendCall.key.tag)
   )
   override val call = backendCall.call
 
-  override def pollerFunction(handle: ExecutionHandle) = backendCall.poll(handle)
+  override def poll(handle: ExecutionHandle) = backendCall.poll(handle)
 
-  override def executionFunction(mode: ExecutionMode) = mode match {
+  override def execute(mode: ExecutionMode) = mode match {
     case Execute => backendCall.execute
     case Resume(jobKey) => backendCall.resume(jobKey)
     case UseCachedCall(cachedBackendCall) => backendCall.useCachedCall(cachedBackendCall)

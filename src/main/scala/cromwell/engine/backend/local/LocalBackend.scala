@@ -212,7 +212,7 @@ case class LocalBackend(actorSystem: ActorSystem) extends Backend with SharedFil
 
       def processSuccess(rc: Int) = {
         postProcess(backendCall) match {
-          case Success(outputs) => backendCall.hash map { h => SuccessfulExecution(outputs, Seq.empty, rc, h) }
+          case Success(outputs) => backendCall.hash map { h => SuccessfulBackendCallExecution(outputs, Seq.empty, rc, h) }
           case Failure(e) =>
             val message = Option(e.getMessage) map { ": " + _ } getOrElse ""
             FailedExecution(new Throwable("Failed post processing of outputs" + message, e)).future

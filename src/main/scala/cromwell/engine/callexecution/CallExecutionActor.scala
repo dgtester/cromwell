@@ -33,7 +33,7 @@ object CallExecutionActor {
 
 trait CallExecutionActor extends Actor  with CromwellActor {
 
-  val akkaLogger = Logging(context.system, classOf[BackendCallExecutionActor])
+  def akkaLogger = Logging(context.system, classOf[BackendCallExecutionActor])
   val logger: WorkflowLogger
 
   implicit val ec = context.system.dispatcher
@@ -78,24 +78,24 @@ trait CallExecutionActor extends Actor  with CromwellActor {
   /**
     * Update the ExecutionHandle
     */
-  def pollerFunction(handle: ExecutionHandle): Future[ExecutionHandle]
+  def poll(handle: ExecutionHandle): Future[ExecutionHandle]
 
   /**
     * Start the execution. Once the Future resolves, the ExecutionHandle can be used to poll
     * the state of the execution.
     */
-  def executionFunction(mode: ExecutionMode): Future[ExecutionHandle]
+  def execute(mode: ExecutionMode): Future[ExecutionHandle]
   val call: Scope
 
   override def receive = LoggingReceive {
     case mode: ExecutionMode =>
-      withRetry(executionFunction(mode),
+      withRetry(execute(mode),
         onSuccess = self ! IssuePollRequest(_),
         onFailure = self ! mode
       )
 
     case IssuePollRequest(handle) =>
-      withRetry(pollerFunction(handle),
+      withRetry(poll(handle),
         onSuccess = self ! PollResponseReceived(_),
         onFailure = self ! IssuePollRequest(handle)
       )

@@ -65,7 +65,7 @@ final case class CompletedExecutionHandle(override val result: ExecutionResult) 
 
 final case class SuccessfulExecutionHandle(outputs: CallOutputs, events: Seq[ExecutionEventEntry], returnCode: Int, hash: ExecutionHash, resultsClonedFrom: Option[BackendCall] = None) extends ExecutionHandle {
   override val isDone = true
-  override val result = SuccessfulExecution(outputs, events, returnCode, hash, resultsClonedFrom)
+  override val result = SuccessfulBackendCallExecution(outputs, events, returnCode, hash, resultsClonedFrom)
 }
 
 final case class FailedExecutionHandle(throwable: Throwable, returnCode: Option[Int] = None) extends ExecutionHandle {

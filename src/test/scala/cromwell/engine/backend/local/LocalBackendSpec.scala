@@ -42,8 +42,8 @@ class LocalBackendSpec extends CromwellTestkitSpec with Mockito {
     val backendCall = backend.bindCall(descriptor, BackendCallKey(call, None), Map.empty[String, WdlValue], abortRegistrationFunction = None)
     backendCall.execute map { _.result } map {
       case FailedExecution(e, _) => if (expectSuccess) fail("A call in a failOnStderr test which should have succeeded has failed ", e)
-      case SuccessfulExecution(_, _, _, _, _) => if (!expectSuccess) fail("A call in a failOnStderr test which should have failed has succeeded")
-      case SuccessfulFinalCall => if (!expectSuccess) fail("A FinalCall in a failOnStderr test which should have failed has succeeded")
+      case SuccessfulBackendCallExecution(_, _, _, _, _) => if (!expectSuccess) fail("A call in a failOnStderr test which should have failed has succeeded")
+      case SuccessfulFinalCallExecution => if (!expectSuccess) fail("A FinalCall in a failOnStderr test which should have failed has succeeded")
       case AbortedExecution => fail("Not expecting this at all")
     }
   }

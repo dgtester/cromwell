@@ -1,7 +1,7 @@
 package cromwell.engine.finalcall
 
 import cromwell.engine._
-import cromwell.engine.backend.{SuccessfulFinalCall, ExecutionResult, ExecutionHandle}
+import cromwell.engine.backend.{SuccessfulFinalCallExecution, ExecutionResult, ExecutionHandle}
 import cromwell.engine.workflow.{FinalCallKey, ExecutionStoreKey}
 import wdl4s.Workflow
 
@@ -31,5 +31,5 @@ case class CopyWorkflowOutputsCall(override val workflow: WorkflowDescriptor) ex
 
 case object CopyWorkflowOutputsHandle extends ExecutionHandle {
   override def isDone = true
-  override def result = SuccessfulFinalCall
+  override def result = SuccessfulFinalCallExecution
 }

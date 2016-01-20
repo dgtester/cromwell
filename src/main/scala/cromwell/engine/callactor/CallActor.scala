@@ -7,13 +7,12 @@ import com.google.api.client.util.ExponentialBackOff
 import cromwell.engine._
 import cromwell.engine.backend._
 import cromwell.engine.callactor.CallActor.{CallActorState, CallActorData}
+import cromwell.engine.callexecution.CallExecutionActor
 import cromwell.engine.callexecution.CallExecutionActor.CallExecutionActorMessage
-import cromwell.engine.workflow.WorkflowManagerActor.CallOutputs
 import cromwell.engine.workflow.{FinalCallKey, BackendCallKey, CallKey, WorkflowActor}
 import cromwell.instrumentation.Instrumentation.Monitor
 import cromwell.logging.WorkflowLogger
-import wdl4s.Scope
-import wdl4s._
+import wdl4s.{CallInputs, Scope}
 import wdl4s.values.WdlValue
 
 import scala.concurrent.ExecutionContext
@@ -30,7 +29,7 @@ object CallActor {
   case object Start extends StartMode { override val executionMessage = callexecution.CallExecutionActor.Execute }
   final case class Resume(jobKey: JobKey) extends StartMode { override val executionMessage = callexecution.CallExecutionActor.Resume(jobKey) }
   final case class UseCachedCall(cachedBackendCall: BackendCall, backendCall: BackendCall) extends StartMode {
-    override val executionMessage = callexecution.CallExecutionActor.UseCachedCall(cachedBackendCall)
+    override val executionMessage = CallExecutionActor.UseCachedCall(cachedBackendCall)
   }
   final case class RegisterCallAbortFunction(abortFunction: AbortFunction) extends CallActorMessage
   case object AbortCall extends CallActorMessage
@@ -85,7 +84,7 @@ trait CallActor extends LoggingFSM[CallActorState, CallActorData] with CromwellA
 
   val key: CallKey
   val workflowDescriptor: WorkflowDescriptor
-  protected def getCallExecutionActor: ActorRef
+  protected def callExecutionActor: ActorRef
 
   import CallActor._
 
@@ -118,7 +117,7 @@ trait CallActor extends LoggingFSM[CallActorState, CallActorData] with CromwellA
       // There's no special Retry/Ack handling required for CallStarted message, the WorkflowActor can always
       // handle those immediately.
       context.parent ! WorkflowActor.CallStarted(key)
-      getCallExecutionActor ! startMode.executionMessage
+      callExecutionActor ! startMode.executionMessage
       goto(CallRunningAbortUnavailable)
     case Event(AbortCall, _) => handleFinished(call, AbortedExecution)
   }
@@ -196,9 +195,9 @@ trait CallActor extends LoggingFSM[CallActorState, CallActorData] with CromwellA
     )
 
     val message = executionResult match {
-      case SuccessfulExecution(outputs, executionEvents, returnCode, hash, resultsClonedFrom) =>
+      case SuccessfulBackendCallExecution(outputs, executionEvents, returnCode, hash, resultsClonedFrom) =>
         WorkflowActor.CallCompleted(key, outputs, executionEvents, returnCode, if (workflowDescriptor.writeToCache) Option(hash) else None, resultsClonedFrom)
-      case SuccessfulFinalCall => WorkflowActor.CallCompleted(key, Map.empty, Seq.empty, 0, None, None)
+      case SuccessfulFinalCallExecution => WorkflowActor.CallCompleted(key, Map.empty, Seq.empty, 0, None, None)
       case AbortedExecution => WorkflowActor.CallAborted(key)
       case FailedExecution(e, returnCode) =>
         logger.error("Failing call: " + e.getMessage, e)
