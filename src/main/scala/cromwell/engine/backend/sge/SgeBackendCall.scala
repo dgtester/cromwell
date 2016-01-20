@@ -32,8 +32,8 @@ case class SgeBackendCall(backend: SgeBackend,
 
   override def stdoutStderr: CallLogs = backend.stdoutStderr(this)
 
-  override def pollingInitialInterval: FiniteDuration = 10.seconds
-  override def pollingMaxInterval: FiniteDuration = 10.minutes
-  override def pollingMultiplier: Double = 1.1D
-  override def pollingInitialGap: FiniteDuration = 0.second
+  override val pollingInitialInterval: FiniteDuration = 10.seconds
+  override val pollingMaxInterval: FiniteDuration = 10.minutes
+  override val pollingMultiplier: Double = 1.1D
+  override val pollingInitialGap: FiniteDuration = 0.second
 }
