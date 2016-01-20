@@ -43,5 +43,5 @@ case class LocalBackendCall(backend: LocalBackend,
   override def pollingInitialInterval: FiniteDuration = 10.seconds
   override def pollingMaxInterval: FiniteDuration = 10.minutes
   override def pollingMultiplier: Double = 1.1D
-
+  override def pollingInitialGap: FiniteDuration = 0.second
 }

@@ -7,6 +7,7 @@ import cromwell.engine.backend.runtimeattributes.{ContinueOnReturnCodeFlag, Cont
 import cromwell.engine.workflow.CallKey
 import cromwell.engine.{CallOutputs, ExecutionEventEntry, ExecutionHash, WorkflowDescriptor}
 import cromwell.logging.WorkflowLogger
+import cromwell.util.EnhancedExponentialBackoff
 import wdl4s._
 import wdl4s.expression.WdlStandardLibraryFunctions
 import wdl4s.values.WdlValue
@@ -189,17 +190,18 @@ trait BackendCall {
   def pollingInitialInterval: FiniteDuration
   def pollingMaxInterval: FiniteDuration
   def pollingMultiplier: Double
+  def pollingInitialGap: FiniteDuration
+
   /**
     * Exponential Backoff to be used when polling for call status.
     */
-  final val pollBackoff: ExponentialBackOff = {
-    new ExponentialBackOff.Builder()
-      .setInitialIntervalMillis(pollingInitialInterval.toMillis.toInt)
-      .setMaxIntervalMillis(pollingMaxInterval.toMillis.toInt)
-      .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
-      .setMultiplier(pollingMultiplier)
-      .build()
-  }
+  final lazy val pollBackoff: ExponentialBackOff = new EnhancedExponentialBackoff.Builder()
+    .setInitialGapMillis(pollingInitialGap.toMillis.toInt)
+    .setInitialIntervalMillis(pollingInitialInterval.toMillis.toInt)
+    .setMaxIntervalMillis(pollingMaxInterval.toMillis.toInt)
+    .setMaxElapsedTimeMillis(Integer.MAX_VALUE)
+    .setMultiplier(pollingMultiplier)
+    .build()
 
   /**
    * Using the execution handle from the previous execution, resumption, or polling attempt, poll the execution

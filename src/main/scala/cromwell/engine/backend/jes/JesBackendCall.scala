@@ -107,7 +107,6 @@ class JesBackendCall(val backend: JesBackend,
   override def useCachedCall(avoidedTo: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] =
     backend.useCachedCall(avoidedTo.asInstanceOf[JesBackendCall], this)
 
-
   override def stdoutStderr: CallLogs = {
     CallLogs(
       stdout = WdlFile(jesStdoutGcsPath),
@@ -116,8 +115,8 @@ class JesBackendCall(val backend: JesBackend,
     )
   }
 
-  override def pollingInitialInterval: FiniteDuration = 3.minutes
+  override def pollingInitialInterval: FiniteDuration = 1.minute
   override def pollingMaxInterval: FiniteDuration = 10.minutes
   override def pollingMultiplier: Double = 1.1D
-
+  override def pollingInitialGap: FiniteDuration = 3.minutes
 }
