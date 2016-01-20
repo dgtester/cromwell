@@ -20,7 +20,10 @@ object EnhancedExponentialBackoff {
     private var gap: Option[Long] = None
 
     def setInitialGapMillis(gap: Int): EnhancedExponentialBackoff.Builder = {
-      this.gap = Some(gap.toLong)
+      this.gap = gap match {
+        case 0 => None
+        case g => Some(g.toLong)
+      }
       this
     }
 
