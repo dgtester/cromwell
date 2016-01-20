@@ -43,7 +43,7 @@ class LocalBackendSpec extends CromwellTestkitSpec with Mockito {
     backendCall.execute map { _.result } map {
       case FailedExecution(e, _) => if (expectSuccess) fail("A call in a failOnStderr test which should have succeeded has failed ", e)
       case SuccessfulBackendCallExecution(_, _, _, _, _) => if (!expectSuccess) fail("A call in a failOnStderr test which should have failed has succeeded")
-      case SuccessfulFinalCallExecution => if (!expectSuccess) fail("A FinalCall in a failOnStderr test which should have failed has succeeded")
+      case SuccessfulFinalCallExecution => fail("A FinalCall shouldn't have run in this failOnStderr")
       case AbortedExecution => fail("Not expecting this at all")
     }
   }

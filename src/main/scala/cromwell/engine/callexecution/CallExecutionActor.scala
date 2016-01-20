@@ -1,7 +1,7 @@
 package cromwell.engine.callexecution
 
 import akka.actor.{Actor, Props}
-import akka.event.{LoggingReceive, Logging}
+import akka.event.{LoggingAdapter, LoggingReceive, Logging}
 import com.google.api.client.util.ExponentialBackOff
 import cromwell.engine.callactor.CallActor
 import cromwell.engine.finalcall.FinalCall
@@ -33,8 +33,8 @@ object CallExecutionActor {
 
 trait CallExecutionActor extends Actor  with CromwellActor {
 
-  def akkaLogger = Logging(context.system, classOf[BackendCallExecutionActor])
-  val logger: WorkflowLogger
+  def akkaLogger = Logging(context.system, classOf[CallExecutionActor])
+  def logger: WorkflowLogger
 
   implicit val ec = context.system.dispatcher
 

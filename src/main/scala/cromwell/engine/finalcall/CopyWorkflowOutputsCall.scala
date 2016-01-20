@@ -11,7 +11,8 @@ object CopyWorkflowOutputsCall {
   val UnqualifiedName: LocallyQualifiedName = "$final_call$copy_workflow_outputs"
   def name(workflowName: String): LocallyQualifiedName = workflowName + ".$final_call$copy_workflow_outputs"
 
-  def getStoreKey(workflow: WorkflowDescriptor): ExecutionStoreKey = FinalCallKey(CopyWorkflowOutputsCall(workflow))
+  def isCopyWorkflowOutputsCallFqn(fqn: String) = fqn.endsWith(UnqualifiedName)
+  def storeKey(workflow: WorkflowDescriptor): ExecutionStoreKey = FinalCallKey(CopyWorkflowOutputsCall(workflow))
 }
 
 /**

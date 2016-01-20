@@ -1,5 +1,6 @@
 package cromwell.engine.callexecution
 
+import akka.event.{Logging, LoggingAdapter}
 import cromwell.engine.backend._
 import cromwell.logging.WorkflowLogger
 
