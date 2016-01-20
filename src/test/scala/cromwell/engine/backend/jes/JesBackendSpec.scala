@@ -225,7 +225,7 @@ class JesBackendSpec extends FlatSpec with Matchers with Mockito with BeforeAndA
       workflowOptions = """ {"jes_gcs_root": "gs://path/to/gcs_root"} """
     ))
     val call = wd.namespace.workflow.findCallByName("hello").get
-    val backendCall = jesBackend.bindCall(wd, CallKey(call, None))
+    val backendCall = jesBackend.bindCall(wd, BackendCallKey(call, None))
     val stdoutstderr = backendCall.stdoutStderr
 
     stdoutstderr.stdout shouldBe WdlFile("gs://path/to/gcs_root/hello/e6236763-c518-41d0-9688-432549a8bf7c/call-hello/hello-stdout.log")
@@ -243,7 +243,7 @@ class JesBackendSpec extends FlatSpec with Matchers with Mockito with BeforeAndA
       workflowOptions = """ {"jes_gcs_root": "gs://path/to/gcs_root"} """
     ))
     val call = wd.namespace.workflow.findCallByName("B").get
-    val backendCall = jesBackend.bindCall(wd, CallKey(call, Some(2)))
+    val backendCall = jesBackend.bindCall(wd, BackendCallKey(call, Some(2)))
     val stdoutstderr = backendCall.stdoutStderr
 
     stdoutstderr.stdout shouldBe WdlFile("gs://path/to/gcs_root/w/e6236763-c518-41d0-9688-432549a8bf7c/call-B/shard-2/B-2-stdout.log")

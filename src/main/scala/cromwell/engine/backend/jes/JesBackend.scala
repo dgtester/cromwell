@@ -147,7 +147,7 @@ object JesBackend {
     def executionStatus: ExecutionStatus = ExecutionStatus.withName(execution.status)
   }
 
-  def callGcsPath(descriptor: WorkflowDescriptor, callKey: CallKey): String = {
+  def callGcsPath(descriptor: WorkflowDescriptor, callKey: BackendCallKey): String = {
     val shardPath = callKey.index map { i => s"/shard-$i" } getOrElse ""
     val workflowPath = workflowGcsPath(descriptor)
     s"$workflowPath/call-${callKey.scope.unqualifiedName}$shardPath"
