@@ -74,7 +74,7 @@ class WorkflowManagerActor(backend: Backend) extends Actor with CromwellActor {
     restartIncompleteWorkflows()
   }
 
-  private def reply[T](future: Future[T], f: (Try[T]) => WorkflowManagerResponse): Unit = {
+  private def reply[T](future: Future[T], f: (Try[T]) => WorkflowManagerResponse[T]): Unit = {
     // Don't close over sender.
     val sndr = sender
     future onComplete {
@@ -82,7 +82,7 @@ class WorkflowManagerActor(backend: Backend) extends Actor with CromwellActor {
     }
   }
 
-  private def reply[T](future: Future[T], id: WorkflowId, f: (Try[T], WorkflowId) => WorkflowManagerResponse): Unit = {
+  private def reply[T](future: Future[T], id: WorkflowId, f: (Try[T], WorkflowId) => WorkflowManagerResponse[T]): Unit = {
     // Don't close over sender.
     val sndr = sender
     future onComplete {

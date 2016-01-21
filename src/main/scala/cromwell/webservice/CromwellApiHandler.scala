@@ -38,10 +38,12 @@ object CromwellApiHandler {
   final case class CallCaching(id: WorkflowId, parameters: QueryParameters, callName: Option[String]) extends WorkflowManagerMessage
   final case class WorkflowMetadata(id: WorkflowId) extends WorkflowManagerMessage
 
-  sealed trait WorkflowManagerResponse
+  sealed trait WorkflowManagerResponse[T] {
+    def response: Try[T]
+  }
 
-  final case class WorkflowManagerSubmissionResponse(response: Try[WorkflowId]) extends WorkflowManagerResponse
-  final case class WorkflowManagerOutputsResponse(response: Try[engine.WorkflowOutputs], id: WorkflowId) extends WorkflowManagerResponse
+  final case class WorkflowManagerSubmissionResponse(override val response: Try[WorkflowId]) extends WorkflowManagerResponse[WorkflowId]
+  final case class WorkflowManagerOutputsResponse(override val response: Try[engine.WorkflowOutputs], id: WorkflowId) extends WorkflowManagerResponse[engine.WorkflowOutputs]
 }
 
 class CromwellApiHandler(workflowManager: ActorRef) extends Actor {

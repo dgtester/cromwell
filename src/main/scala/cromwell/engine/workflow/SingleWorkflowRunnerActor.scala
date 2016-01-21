@@ -6,6 +6,7 @@ import akka.actor.FSM.Transition
 import akka.actor._
 import better.files._
 import cromwell.engine
+import cromwell.webservice.CromwellApiHandler.{WorkflowManagerOutputsResponse, WorkflowManagerSubmissionResponse}
 import wdl4s.FullyQualifiedName
 import cromwell.engine._
 import cromwell.engine.workflow.SingleWorkflowRunnerActor._
@@ -76,10 +77,16 @@ case class SingleWorkflowRunnerActor(source: WorkflowSourceFiles,
   }
 
   when (RunningWorkflow) {
-    case Event(id: WorkflowId, data) =>
-      log.info(s"$tag: workflow ID UUID($id)")
-      workflowManager ! SubscribeToWorkflow(id)
-      stay using data.copy(id = Option(id))
+    case Event(WorkflowManagerSubmissionResponse(tryId), data) =>
+      tryId match {
+        case Success(id) =>
+          log.info(s"$tag: workflow ID UUID($id)")
+          workflowManager ! SubscribeToWorkflow(id)
+          stay using data.copy(id = Option(id))
+        case failure =>
+          self ! failure
+          stay
+      }
     case Event(Transition(_, _, WorkflowSucceeded), data) =>
       workflowManager ! WorkflowOutputs(data.id.get)
       goto(RequestingOutputs) using data.copy(terminalState = Option(WorkflowSucceeded))
@@ -97,9 +104,9 @@ case class SingleWorkflowRunnerActor(source: WorkflowSourceFiles,
   when (RequestingOutputs) {
     // Can't use the WorkflowOutputs type alias here since the @unchecked needs to be added to suppress
     // compile time warnings.
-    case Event(outputs: Map[FullyQualifiedName@unchecked, CallOutput@unchecked], data) =>
+    case Event(WorkflowManagerOutputsResponse(outputs, id), data) =>
       // Outputs go to stdout
-      outputOutputs(outputs)
+      outputOutputs(outputs.get)
       if (metadataOutputPath.isDefined) requestMetadata else issueReply
   }
   
@@ -123,6 +130,9 @@ case class SingleWorkflowRunnerActor(source: WorkflowSourceFiles,
   }
 
   whenUnhandled {
+    case Event(Failure(e), data) =>
+      log.error(e, s"$tag received Failure message: " + e.getMessage)
+      issueReply using data.addFailure(e)
     case Event(Status.Failure(e), data) =>
       log.error(e, s"$tag received Failure message: " + e.getMessage)
       issueReply using data.addFailure(e)
