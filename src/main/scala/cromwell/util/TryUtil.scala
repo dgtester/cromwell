@@ -6,7 +6,6 @@ import cromwell.engine.CromwellFatalException
 import cromwell.logging.WorkflowLogger
 
 import scala.annotation.tailrec
-import scala.concurrent.duration.Duration
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -58,7 +57,7 @@ object TryUtil {
     */
   @tailrec
   def retryBlock[T](fn: Option[T] => T,
-                    backoff: InitializedBackoff,
+                    backoff: Backoff,
                     isSuccess: T => Boolean = defaultSuccessFunction _,
                     retryLimit: Option[Int],
                     logger: WorkflowLogger,

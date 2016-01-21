@@ -6,22 +6,10 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 
 sealed trait Backoff {
   def backoffMillis: Long
-  def next: InitializedBackoff
+  def next: Backoff
 }
 
-/**
-  * Useful when using Backoffs in a "functional" backoff.next.backoffMillis way.
-  * This prevents the first call to next to shunt out the first value of backoffMillis.
-  */
-final case class UnInitializedBackoff(next: InitializedBackoff) extends Backoff {
-  override def backoffMillis = throw new UninitializedError()
-}
-
-sealed trait InitializedBackoff extends Backoff {
-  def uninitialized: UnInitializedBackoff = UnInitializedBackoff(this)
-}
-
-final class InitialGapBackoff(initialGapMillis: FiniteDuration, googleBackoff: ExponentialBackOff) extends InitializedBackoff {
+final class InitialGapBackoff(initialGapMillis: FiniteDuration, googleBackoff: ExponentialBackOff) extends Backoff {
 
   assert(initialGapMillis.compareTo(Duration.Zero) != 0, "Initial gap cannot be null, use SimpleBackoff instead.")
   override val backoffMillis = initialGapMillis.toMillis
@@ -38,7 +26,7 @@ final class InitialGapBackoff(initialGapMillis: FiniteDuration, googleBackoff: E
   override def next = new SimpleBackoff(googleBackoff)
 }
 
-final class SimpleBackoff(googleBackoff: ExponentialBackOff) extends InitializedBackoff {
+final class SimpleBackoff(googleBackoff: ExponentialBackOff) extends Backoff {
 
   def this(initialInterval: FiniteDuration, maxInterval: FiniteDuration, multiplier: Double) = {
     this(new ExponentialBackOff.Builder()

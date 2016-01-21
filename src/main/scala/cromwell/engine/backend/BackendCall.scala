@@ -2,12 +2,13 @@ package cromwell.engine.backend
 
 import akka.event.LoggingAdapter
 import com.google.api.client.util.ExponentialBackOff
+import com.google.api.client.util.ExponentialBackOff.Builder
 import cromwell.engine.Hashing._
 import cromwell.engine.backend.runtimeattributes.{ContinueOnReturnCodeFlag, ContinueOnReturnCodeSet, CromwellRuntimeAttributes}
 import cromwell.engine.workflow.CallKey
 import cromwell.engine.{CallOutputs, ExecutionEventEntry, ExecutionHash, WorkflowDescriptor}
 import cromwell.logging.WorkflowLogger
-import cromwell.util.{InitialGapBackoff, UnInitializedBackoff}
+import cromwell.util.{Backoff, InitialGapBackoff, UnInitializedBackoff}
 import wdl4s._
 import wdl4s.expression.WdlStandardLibraryFunctions
 import wdl4s.values.WdlValue
@@ -187,7 +188,9 @@ trait BackendCall {
       Future.successful(ExecutionHash("", None))
   }
 
+  // TODO: Not used yet - waiting for CEA refactoring
   def pollingInitialGap: FiniteDuration
+
   def pollingInitialInterval: FiniteDuration
   def pollingMaxInterval: FiniteDuration
   def pollingMultiplier: Double
@@ -195,7 +198,12 @@ trait BackendCall {
   /**
     * Exponential Backoff to be used when polling for call status.
     */
-  final lazy val pollBackoff: UnInitializedBackoff = new InitialGapBackoff(pollingInitialGap, pollingInitialInterval, pollingMaxInterval, pollingMultiplier).uninitialized
+  final lazy val pollBackoff: ExponentialBackOff = new Builder()
+    .setInitialIntervalMillis(pollingInitialInterval.toMillis.toInt)
+    .setMaxElapsedTimeMillis(Int.MaxValue)
+    .setMaxIntervalMillis(pollingMaxInterval.toMillis.toInt)
+    .setMultiplier(pollingMultiplier)
+    .build
 
   /**
    * Using the execution handle from the previous execution, resumption, or polling attempt, poll the execution
