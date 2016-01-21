@@ -10,9 +10,7 @@ sealed trait Backoff {
 }
 
 final class InitialGapBackoff(initialGapMillis: FiniteDuration, googleBackoff: ExponentialBackOff) extends Backoff {
-
   assert(initialGapMillis.compareTo(Duration.Zero) != 0, "Initial gap cannot be null, use SimpleBackoff instead.")
-  override val backoffMillis = initialGapMillis.toMillis
 
   def this(initialGap: FiniteDuration, initialInterval: FiniteDuration, maxInterval: FiniteDuration, multiplier: Double) = {
     this(initialGap, new ExponentialBackOff.Builder()
@@ -23,11 +21,11 @@ final class InitialGapBackoff(initialGapMillis: FiniteDuration, googleBackoff: E
       .build())
   }
 
+  override val backoffMillis = initialGapMillis.toMillis
   override def next = new SimpleBackoff(googleBackoff)
 }
 
 final class SimpleBackoff(googleBackoff: ExponentialBackOff) extends Backoff {
-
   def this(initialInterval: FiniteDuration, maxInterval: FiniteDuration, multiplier: Double) = {
     this(new ExponentialBackOff.Builder()
       .setInitialIntervalMillis(initialInterval.toMillis.toInt)
