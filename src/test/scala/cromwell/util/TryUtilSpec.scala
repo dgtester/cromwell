@@ -1,12 +1,14 @@
 package cromwell.util
 
-import cromwell.engine.CromwellFatalException
+import java.util.UUID
+
+import cromwell.engine.{CromwellFatalException, WorkflowId, WorkflowSourceFiles, WorkflowDescriptor}
 import cromwell.logging.WorkflowLogger
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.{FlatSpec, Matchers}
 
-import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.concurrent.duration._
 import scala.util.Success
 
 class TryUtilSpec extends FlatSpec with Matchers with MockitoSugar {
@@ -28,14 +30,15 @@ class TryUtilSpec extends FlatSpec with Matchers with MockitoSugar {
   }
 
   val logger = mock[WorkflowLogger]
-  val backoff = new SimpleBackoff(50 milliseconds, 10 seconds, 1D)
 
   it should "Retry a function until it works" in {
     val work = new MockWork
     val value = TryUtil.retryBlock(
       fn = work.failNTimes(4),
       retryLimit = Some(5),
-      backoff = backoff,
+      pollingInterval = 50 milliseconds,
+      pollingBackOffFactor = 1,
+      maxPollingInterval = 10 seconds,
       logger = logger,
       failMessage = Some(s"failed attempt (on purpose)")
     )
@@ -48,7 +51,9 @@ class TryUtilSpec extends FlatSpec with Matchers with MockitoSugar {
     val value = TryUtil.retryBlock(
       fn = work.failNTimes(4),
       retryLimit = Some(4),
-      backoff = backoff,
+      pollingInterval = 50 milliseconds,
+      pollingBackOffFactor = 1,
+      maxPollingInterval = 10 seconds,
       logger = logger,
       failMessage = Some(s"failed attempt (on purpose)")
     )
@@ -61,7 +66,9 @@ class TryUtilSpec extends FlatSpec with Matchers with MockitoSugar {
     val value = TryUtil.retryBlock(
       fn = work.failNTimes(4),
       retryLimit = Some(4),
-      backoff = backoff,
+      pollingInterval = 50 milliseconds,
+      pollingBackOffFactor = 1,
+      maxPollingInterval = 10 seconds,
       logger = logger,
       failMessage = Some(s"failed attempt (on purpose)"),
       isFatal = (t: Throwable) => t.isInstanceOf[IllegalArgumentException]

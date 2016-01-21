@@ -16,7 +16,7 @@ import cromwell.engine.io.shared.SharedFileSystemIoInterface
 import cromwell.engine.io.{IoInterface, IoManager}
 import cromwell.engine.workflow.WorkflowOptions
 import cromwell.logging.WorkflowLogger
-import cromwell.util.{SimpleBackoff, TryUtil}
+import cromwell.util.TryUtil
 import lenthall.config.ScalaConfig._
 import org.slf4j.helpers.NOPLogger
 import org.slf4j.{Logger, LoggerFactory}
@@ -118,7 +118,9 @@ case class WorkflowDescriptor(id: WorkflowId,
       TryUtil.retryBlock(
         fn = (retries: Option[Unit]) => copy(),
         retryLimit = Option(5),
-        backoff = new SimpleBackoff(5 seconds, 10 seconds, 1.1D),
+        pollingInterval = 5 seconds,
+        pollingBackOffFactor = 1,
+        maxPollingInterval = 10 seconds,
         logger = logger,
         failMessage = Option(s"Failed to copy file $src to $dest"),
         isFatal = (t: Throwable) => t.isInstanceOf[FileAlreadyExistsException]

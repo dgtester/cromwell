@@ -8,7 +8,6 @@ import cromwell.engine.backend.runtimeattributes.{ContinueOnReturnCodeFlag, Cont
 import cromwell.engine.workflow.CallKey
 import cromwell.engine.{CallOutputs, ExecutionEventEntry, ExecutionHash, WorkflowDescriptor}
 import cromwell.logging.WorkflowLogger
-import cromwell.util.{Backoff, InitialGapBackoff, UnInitializedBackoff}
 import wdl4s._
 import wdl4s.expression.WdlStandardLibraryFunctions
 import wdl4s.values.WdlValue
