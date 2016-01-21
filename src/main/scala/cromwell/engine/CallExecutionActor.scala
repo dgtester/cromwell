@@ -4,6 +4,7 @@ import akka.actor.{Actor, Props}
 import akka.event.{Logging, LoggingReceive}
 import cromwell.engine.backend._
 import cromwell.logging.WorkflowLogger
+import cromwell.util.Backoff
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -53,8 +54,8 @@ class CallExecutionActor(backendCall: BackendCall) extends Actor with CromwellAc
    * Schedule work according to the schedule of the `backoff`.
    */
   private def scheduleWork(work: => Unit): Unit = {
-    val interval = backendCall.pollBackoff.nextBackOffMillis().millis
-    context.system.scheduler.scheduleOnce(interval) {
+    val interval = backendCall.pollBackoff.next.backoffMillis
+    context.system.scheduler.scheduleOnce(interval.millis) {
       work
     }
   }

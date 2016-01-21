@@ -2,35 +2,53 @@ package cromwell.util
 
 import com.google.api.client.util.ExponentialBackOff
 
-class EnhancedExponentialBackoff(enhancedBuilder: EnhancedExponentialBackoff.Builder) extends ExponentialBackOff(enhancedBuilder) {
-  private var firstCall: Boolean = true
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
-  override def nextBackOffMillis(): Long = {
-    if (firstCall && enhancedBuilder.getInitialGapMillis.isDefined) {
-      firstCall = false
-      enhancedBuilder.getInitialGapMillis.get
-    } else {
-      super.nextBackOffMillis()
-    }
-  }
+sealed trait Backoff {
+  def backoffMillis: Long
+  def next: InitializedBackoff
 }
 
-object EnhancedExponentialBackoff {
-  class Builder extends ExponentialBackOff.Builder {
-    private var gap: Option[Long] = None
+/**
+  * Useful when using Backoffs in a "functional" backoff.next.backoffMillis way.
+  * This prevents the first call to next to shunt out the first value of backoffMillis.
+  */
+final case class UnInitializedBackoff(next: InitializedBackoff) extends Backoff {
+  override def backoffMillis = throw new UninitializedError()
+}
 
-    def setInitialGapMillis(gap: Int): EnhancedExponentialBackoff.Builder = {
-      this.gap = gap match {
-        case 0 => None
-        case g => Some(g.toLong)
-      }
-      this
-    }
+sealed trait InitializedBackoff extends Backoff {
+  def uninitialized: UnInitializedBackoff = UnInitializedBackoff(this)
+}
 
-    def getInitialGapMillis = gap
+final class InitialGapBackoff(initialGapMillis: FiniteDuration, googleBackoff: ExponentialBackOff) extends InitializedBackoff {
 
-    override def build() = {
-      new EnhancedExponentialBackoff(this)
-    }
+  assert(initialGapMillis.compareTo(Duration.Zero) != 0, "Initial gap cannot be null, use SimpleBackoff instead.")
+  override val backoffMillis = initialGapMillis.toMillis
+
+  def this(initialGap: FiniteDuration, initialInterval: FiniteDuration, maxInterval: FiniteDuration, multiplier: Double) = {
+    this(initialGap, new ExponentialBackOff.Builder()
+      .setInitialIntervalMillis(initialInterval.toMillis.toInt)
+      .setMaxIntervalMillis(maxInterval.toMillis.toInt)
+      .setMultiplier(multiplier)
+      .setMaxElapsedTimeMillis(Int.MaxValue)
+      .build())
   }
+
+  override def next = new SimpleBackoff(googleBackoff)
+}
+
+final class SimpleBackoff(googleBackoff: ExponentialBackOff) extends InitializedBackoff {
+
+  def this(initialInterval: FiniteDuration, maxInterval: FiniteDuration, multiplier: Double) = {
+    this(new ExponentialBackOff.Builder()
+    .setInitialIntervalMillis(initialInterval.toMillis.toInt)
+    .setMaxIntervalMillis(maxInterval.toMillis.toInt)
+    .setMultiplier(multiplier)
+    .setMaxElapsedTimeMillis(Int.MaxValue)
+    .build())
+  }
+
+  override def backoffMillis = googleBackoff.nextBackOffMillis()
+  override def next = this
 }
