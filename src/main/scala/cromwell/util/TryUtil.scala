@@ -2,6 +2,7 @@ package cromwell.util
 
 import java.io.{PrintWriter, StringWriter}
 
+import cromwell.engine.CromwellFatalException
 import cromwell.logging.WorkflowLogger
 
 import scala.concurrent.duration.Duration
@@ -28,6 +29,7 @@ object TryUtil {
     possibleFailures.collect { case failure: Failure[T] => stringifyFailure(failure) }
 
   private def defaultSuccessFunction(a: Any): Boolean = true
+  private def defaultIsFatal(t: Throwable): Boolean = false
 
   /**
    * Runs a block of code (`fn`) `retries` number of times until it succeeds.
@@ -53,7 +55,8 @@ object TryUtil {
                     maxPollingInterval: Duration,
                     logger: WorkflowLogger,
                     failMessage: Option[String] = None,
-                    priorValue: Option[T] = None): Try[T] = {
+                    priorValue: Option[T] = None,
+                    isFatal: (Throwable) => Boolean = defaultIsFatal _): Try[T] = {
 
     def logFailures(attempt: Try[T]): Unit = {
       attempt recover {
@@ -63,6 +66,7 @@ object TryUtil {
 
     Try { fn(priorValue) } match {
       case Success(x) if isSuccess(x) => Success(x)
+      case Failure(f) if isFatal(f) => Failure(new CromwellFatalException(f))
       case value if (retryLimit.isDefined && retryLimit.get > 1) || retryLimit.isEmpty =>
         logFailures(value)
         val retryCountMessage = if (retryLimit.getOrElse(0) > 0) s" (${retryLimit.getOrElse(0) - 1} more retries) " else ""
@@ -84,7 +88,9 @@ object TryUtil {
         )
       case f =>
         logFailures(f)
-        f
+        f recoverWith {
+          case e => Failure(new CromwellFatalException(e))
+        }
     }
   }
 

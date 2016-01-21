@@ -2,13 +2,16 @@ package cromwell.engine.workflow
 
 import akka.actor.{Actor, ActorRef, Props}
 import com.typesafe.scalalogging.LazyLogging
-import cromwell.binding._
 import cromwell.engine.backend.CromwellBackend
+import cromwell.engine.backend.runtimeattributes.CromwellRuntimeAttributes
+import wdl4s._
 import cromwell.webservice.PerRequest.RequestComplete
-import cromwell.webservice.{WorkflowJsonSupport, WorkflowValidateResponse}
+import cromwell.webservice.{APIResponse, WorkflowJsonSupport, WorkflowValidateResponse}
+import cromwell.webservice.WorkflowJsonSupport._
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
 import spray.json._
+import ValidateActor.EnhancedCall
 
 import scala.concurrent.Future
 import scala.language.postfixOps
@@ -22,6 +25,10 @@ object ValidateActor {
 
   def props(wdlSource: WdlSource, wdlJson: WdlJson): Props = {
     Props(new ValidateActor(wdlSource, wdlJson))
+  }
+
+  implicit class EnhancedCall(val call: Call) extends AnyVal {
+    def toRuntimeAttributes = CromwellRuntimeAttributes(call.task.runtimeAttributes, CromwellBackend.backend().backendType)
   }
 }
 
@@ -41,9 +48,10 @@ class ValidateActor(wdlSource: WdlSource, wdlJson: WdlJson)
   private def validateWorkflow(sentBy: ActorRef): Unit = {
     logger.info(s"$tag for $sentBy")
     val futureValidation: Future[Unit] = for {
-      namespaceWithWorkflow <- Future(NamespaceWithWorkflow.load(wdlSource, CromwellBackend.backend().backendType))
+      namespaceWithWorkflow <- Future(NamespaceWithWorkflow.load(wdlSource))
       inputs <- Future(wdlJson.parseJson).map(_.asJsObject.fields)
       coercedInputs <- Future.fromTry(namespaceWithWorkflow.coerceRawInputs(inputs))
+      runtime = namespaceWithWorkflow.workflow.calls foreach { _.toRuntimeAttributes }
     } yield () // Validate that the future run and return `Success[Unit]` aka (), or `Failure[Exception]`
 
     futureValidation onComplete {
@@ -51,14 +59,14 @@ class ValidateActor(wdlSource: WdlSource, wdlJson: WdlJson)
         logger.info(s"$tag success $sentBy")
         sentBy ! RequestComplete(
           StatusCodes.OK,
-          WorkflowValidateResponse(valid = true, error = None))
+          APIResponse.success("Validation succeeded."))
 
       case Failure(ex) =>
         val messageOrBlank = Option(ex.getMessage).mkString
         logger.info(s"$tag error $sentBy: $messageOrBlank")
         sentBy ! RequestComplete(
           StatusCodes.BadRequest,
-          WorkflowValidateResponse(valid = false, error = Option(messageOrBlank)))
+          APIResponse.fail(ex))
     }
   }
 }

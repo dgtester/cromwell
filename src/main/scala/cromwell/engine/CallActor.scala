@@ -4,12 +4,11 @@ import akka.actor.FSM.NullFunction
 import akka.actor.{Actor, Cancellable, LoggingFSM, Props}
 import akka.event.Logging
 import com.google.api.client.util.ExponentialBackOff
-import cromwell.binding._
-import cromwell.binding.values.WdlValue
+import wdl4s._
+import wdl4s.values.WdlValue
 import cromwell.engine.CallActor.{CallActorData, CallActorState}
 import cromwell.engine.CallExecutionActor.CallExecutionActorMessage
 import cromwell.engine.backend._
-import cromwell.engine.db.slick.Execution
 import cromwell.engine.workflow.{CallKey, WorkflowActor}
 import cromwell.instrumentation.Instrumentation.Monitor
 import cromwell.logging.WorkflowLogger
@@ -17,8 +16,6 @@ import cromwell.logging.WorkflowLogger
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
-
-import scala.util.{Try, Success, Failure}
 
 
 object CallActor {
@@ -114,7 +111,7 @@ class CallActor(key: CallKey, locallyQualifiedInputs: CallInputs, backend: Backe
       // There's no special Retry/Ack handling required for CallStarted message, the WorkflowActor can always
       // handle those immediately.
       context.parent ! WorkflowActor.CallStarted(key)
-      val backendCall = backend.bindCall(workflowDescriptor, key, locallyQualifiedInputs, AbortRegistrationFunction(registerAbortFunction))
+      val backendCall = backend.bindCall(workflowDescriptor, key, locallyQualifiedInputs, Option(AbortRegistrationFunction(registerAbortFunction)))
       val executionActorName = s"CallExecutionActor-${workflowDescriptor.id}-${call.unqualifiedName}"
       context.actorOf(CallExecutionActor.props(backendCall), executionActorName) ! startMode.executionMessage
       goto(CallRunningAbortUnavailable)

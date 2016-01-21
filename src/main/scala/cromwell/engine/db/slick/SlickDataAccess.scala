@@ -7,9 +7,9 @@ import javax.sql.rowset.serial.SerialClob
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcProfile
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
-import cromwell.binding._
-import cromwell.binding.types.{WdlPrimitiveType, WdlType}
-import cromwell.binding.values.WdlValue
+import wdl4s._
+import wdl4s.types.{WdlPrimitiveType, WdlType}
+import wdl4s.values.WdlValue
 import cromwell.engine.ExecutionIndex._
 import cromwell.engine.ExecutionStatus._
 import cromwell.engine._
@@ -18,7 +18,8 @@ import cromwell.engine.backend.local.LocalBackend
 import cromwell.engine.backend.sge.SgeBackend
 import cromwell.engine.backend.{Backend, WorkflowQueryResult}
 import cromwell.engine.db._
-import cromwell.engine.workflow.{CallKey, ExecutionStoreKey, OutputKey, ScatterKey}
+import cromwell.engine.workflow._
+import cromwell.engine.{SymbolHash, CallOutput, WorkflowOutputs}
 import cromwell.webservice.{CallCachingParameters, WorkflowQueryParameters, WorkflowQueryResponse}
 import lenthall.config.ScalaConfig._
 import org.joda.time.DateTime
@@ -186,6 +187,7 @@ class SlickDataAccess(databaseConfig: Config) extends DataAccess {
     val scopeKeys: Traversable[ExecutionStoreKey] = scopes collect {
       case call: Call => CallKey(call, None)
       case scatter: Scatter => ScatterKey(scatter, None)
+      case finalCall: FinalCall => FinalCallKey(finalCall)
     }
 
     val action = for {
@@ -563,18 +565,17 @@ class SlickDataAccess(databaseConfig: Config) extends DataAccess {
     type ProjectionFunction = SlickDataAccess.this.dataAccess.Symbols => (Rep[String], Rep[Option[Clob]])
     val projectionFn: ProjectionFunction = (s: SlickDataAccess.this.dataAccess.Symbols) => (s.wdlType, s.wdlValue)
 
-    val futureCounts = callInputs map { case (inputName, wdlValue) =>
-      val action = for {
+    val inputUpdateActions = callInputs map { case (inputName, wdlValue) =>
+      for {
         workflowExecutionResult <- dataAccess.workflowExecutionsByWorkflowExecutionUuid(workflowId.toString).result.head
         symbols = dataAccess.symbolsFilterByWorkflowAndScopeAndNameAndIndex(workflowExecutionResult.workflowExecutionId.get, key.scope.fullyQualifiedName, inputName, key.index.fromIndex)
         count <- symbols.map(projectionFn).update(wdlValue.wdlType.toWdlString, Option(wdlValueToDbValue(wdlValue).toClob))
       } yield count
-
-      runTransaction(action)
     }
 
-    // Do an FP dance to get the Future[Int] from Future[Traversable[Int]]:
-    Future.sequence(futureCounts) map { _.sum }
+    // Do an FP dance to get the DBIOAction[Iterable[Int]] from Iterable[DBIOAction[Int]].
+    val allInputUpdatesAction = DBIO.sequence(inputUpdateActions)
+    runTransaction(allInputUpdatesAction) map { _.sum }
   }
 
   override def setExecutionEvents(workflowId: WorkflowId, callFqn: String, shardIndex: Option[Int], events: Seq[ExecutionEventEntry]): Future[Unit] = {

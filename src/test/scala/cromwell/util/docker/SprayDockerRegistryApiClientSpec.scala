@@ -2,6 +2,7 @@ package cromwell.util.docker
 
 import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
+import cromwell.CromwellSpec.{DockerTest, IntegrationTest}
 import cromwell.util.DockerConfiguration
 import cromwell.util.google.{GoogleCredentialFactory, GoogleCredentialFactorySpec}
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
@@ -30,7 +31,7 @@ with IntegrationPatience {
 
   behavior of "SprayDockerRegistryApiClient"
 
-  it should "resolve docker hub image hashes" in {
+  it should "resolve docker hub image hashes" taggedAs IntegrationTest in {
     val identifiers = Table(
       "identifier",
       "ubuntu",
@@ -45,7 +46,7 @@ with IntegrationPatience {
     }
   }
 
-  it should "resolve docker hub image v1 layer ids" in {
+  it should "resolve docker hub image v1 layer ids" taggedAs IntegrationTest in {
     val identifiers = Table(
       "identifier",
       "ubuntu",
@@ -62,7 +63,7 @@ with IntegrationPatience {
     }
   }
 
-  it should "resolve docker hub and gcr digests" in {
+  it should "resolve docker hub and gcr digests" taggedAs IntegrationTest in {
     val identifiers = Table(
       "identifier",
       "ubuntu@sha256:f91f9bab1fe6d0db0bfecc751d127a29d36e85483b1c68e69a246cf1df9b4251",
@@ -77,7 +78,7 @@ with IntegrationPatience {
     }
   }
 
-  it should "resolve docker hub tags using authentication" in {
+  it should "resolve docker hub tags using authentication" taggedAs(DockerTest, IntegrationTest) in {
     DockerHubLoginProviderSpec.assumeDockerHubAuthExists()
 
     val identifiers = Table(
@@ -98,7 +99,7 @@ with IntegrationPatience {
     }
   }
 
-  it should "not resolve docker hub tags when using bad authentication" in {
+  it should "not resolve docker hub tags when using bad authentication" taggedAs IntegrationTest in {
     val identifiers = Table(
       "identifier",
       "ubuntu",
@@ -125,7 +126,7 @@ with IntegrationPatience {
     }
   }
 
-  it should "fail to resolve gcr image tags when google authentication is not setup" in {
+  it should "fail to resolve gcr image tags when google authentication is not setup" taggedAs IntegrationTest in {
     val identifiers = Table(
       "identifier",
       "gcr.io/broad-dsde-dev/ubuntu",
@@ -138,7 +139,7 @@ with IntegrationPatience {
     }
   }
 
-  it should "fail to resolve gcr image tags when unauthenticated" in {
+  it should "fail to resolve gcr image tags when unauthenticated" taggedAs IntegrationTest in {
     val gcrRegistry = DockerRegistry("gcr.io", NoLoginProvider)
     val gcrUSRegistry = DockerRegistry("us.gcr.io", NoLoginProvider)
 
@@ -150,11 +151,19 @@ with IntegrationPatience {
     forAll(identifiers) { identifier =>
       val exception = client.getDockerHashable(identifier).failed.futureValue
       exception shouldBe an[UnsuccessfulResponseException]
-      exception.getMessage should be("Status: 404 Not Found\nBody: Not found.")
+      /*
+        Something on the GCR server changed, or perhaps our test environment now supplies a default credential? Either
+        way, we're now getting 403 Forbidden errors instead of 404 Not Found. Just in case this a temporary change,
+        check for either. Alternatively, we could also just check for any 4xx, or not test for the message at all.
+       */
+      exception.getMessage should (
+        be(s"Status: 403 Forbidden\nBody: Unable to access the repository: ${identifier.name}; " +
+          "please verify that it exists and you have permission to access it (no valid credential was supplied).") or
+        be("Status: 404 Not Found\nBody: Not found."))
     }
   }
 
-  it should "resolve gcr image tags when google authentication is setup" in {
+  it should "resolve gcr image tags when google authentication is setup" taggedAs IntegrationTest in {
     GoogleCredentialFactorySpec.assumeAccountConfigExists()
 
     val identifiers = Table(

@@ -3,8 +3,8 @@ package cromwell.engine.backend.local
 import java.nio.file.Paths
 
 import cromwell.CromwellTestkitSpec
-import cromwell.binding.WdlSource
-import cromwell.binding.values.WdlValue
+import wdl4s.WdlSource
+import wdl4s.values.WdlValue
 import cromwell.engine.backend._
 import cromwell.engine.workflow.CallKey
 import cromwell.engine.{AbortRegistrationFunction, WorkflowDescriptor}
@@ -39,7 +39,7 @@ class LocalBackendSpec extends CromwellTestkitSpec with Mockito {
   def testFailOnStderr(descriptor: WorkflowDescriptor, expectSuccess: Boolean): Unit = {
     val call = descriptor.namespace.workflow.calls.head
     val backend = new LocalBackend(system)
-    val backendCall = backend.bindCall(descriptor, CallKey(call, None), Map.empty[String, WdlValue], AbortRegistrationFunction(_ => ()))
+    val backendCall = backend.bindCall(descriptor, CallKey(call, None), Map.empty[String, WdlValue], abortRegistrationFunction = None)
     backendCall.execute map { _.result } map {
       case FailedExecution(e, _) => if (expectSuccess) fail("A call in a failOnStderr test which should have succeeded has failed ", e)
       case SuccessfulExecution(_, _, _, _, _) => if (!expectSuccess) fail("A call in a failOnStderr test which should have failed has succeeded")

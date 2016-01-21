@@ -5,15 +5,16 @@ import java.nio.file.{Files, Path, Paths}
 
 import akka.actor.ActorSystem
 import better.files._
-import cromwell.binding._
+import com.typesafe.config.ConfigFactory
 import cromwell.engine.ExecutionIndex._
 import cromwell.engine._
 import cromwell.engine.backend._
 import cromwell.engine.db.DataAccess._
 import cromwell.engine.db.{CallStatus, ExecutionDatabaseKey}
 import cromwell.engine.workflow.CallKey
-import cromwell.parser.BackendType
 import cromwell.util.FileUtil._
+import org.slf4j.LoggerFactory
+import wdl4s._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -72,6 +73,35 @@ object LocalBackend {
       case None => rootCallPath
     }
   }
+
+  lazy val logger = LoggerFactory.getLogger("cromwell")
+
+  /**
+    * If using Mac OS X with Docker Machine, by default Cromwell can only use the -v flag to 'docker run'
+    * if running from somewhere within the user's home directory.  If not, then -v will mount to the
+    * virtual machine that Docker Machine creates.  This ends up bubbling up to Cromwell when it can't find
+    * an RC file in the call's output directory (because it's actually on the virtual machine).
+    *
+    * This function will at least detect this case and log some WARN messages.
+    */
+  def detectDockerMachinePossibleMisusage = {
+    val backendConf = ConfigFactory.load.getConfig("backend")
+    val sharedFileSystemConf = backendConf.getConfig("shared-filesystem")
+    val cromwellExecutionRoot = Paths.get(sharedFileSystemConf.getString("root")).toAbsolutePath.toString
+    val os = Option(System.getProperty("os.name"))
+    val homeDir = Option(System.getProperty("user.home")).map(Paths.get(_).toAbsolutePath.toString)
+    val dockerMachineName = sys.env.get("DOCKER_MACHINE_NAME")
+    if (dockerMachineName.nonEmpty && os.contains("Mac OS X") && homeDir.isDefined && !cromwellExecutionRoot.startsWith(homeDir.get)) {
+      val message = s"""You are running Docker using Docker Machine and your working directory is not a subdirectory of ${homeDir.get}
+                        |By default, Docker Machine using Virtual Box only allows -v to mount to your Mac's filesystem for paths under your home directory.
+                        |Running Cromwell outside of your home directory could lead to unexpected task failures.
+                        |
+                        |See https://docs.docker.com/engine/userguide/dockervolumes/ for more information on volume mounting in Docker."""
+      message.stripMargin.split("\n").foreach(logger.warn)
+    }
+  }
+
+  detectDockerMachinePossibleMisusage
 }
 
 
@@ -86,13 +116,15 @@ case class LocalBackend(actorSystem: ActorSystem) extends Backend with SharedFil
   override def bindCall(workflowDescriptor: WorkflowDescriptor,
                         key: CallKey,
                         locallyQualifiedInputs: CallInputs,
-                        abortRegistrationFunction: AbortRegistrationFunction): BackendCall = {
+                        abortRegistrationFunction: Option[AbortRegistrationFunction]): BackendCall = {
     LocalBackendCall(this, workflowDescriptor, key, locallyQualifiedInputs, abortRegistrationFunction)
   }
 
+  def stdoutStderr(backendCall: BackendCall): CallLogs = sharedFileSystemStdoutStderr(backendCall)
+
   def execute(backendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = Future({
     val logger = workflowLoggerWithCall(backendCall)
-    backendCall.instantiateCommand match {
+    instantiateCommand(backendCall) match {
       case Success(instantiatedCommand) =>
         logger.info(s"`$instantiatedCommand`")
         writeScript(backendCall, instantiatedCommand, backendCall.containerCallRoot)
@@ -143,17 +175,16 @@ case class LocalBackend(actorSystem: ActorSystem) extends Backend with SharedFil
     s"docker run --rm -v ${backendCall.callRootPath.toAbsolutePath}:$callPath -i $image"
   }
 
-
   private def runSubprocess(backendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionResult] = {
     val logger = workflowLoggerWithCall(backendCall)
     val stdoutWriter = backendCall.stdout.untailed
     val stderrTailed = backendCall.stderr.tailed(100)
-    val dockerRun = backendCall.call.docker.map(d => buildDockerRunCommand(backendCall, d)).getOrElse("")
+    val dockerRun = backendCall.runtimeAttributes.docker.map(d => buildDockerRunCommand(backendCall, d)).getOrElse("")
     val argv = Seq("/bin/bash", "-c", s"cat ${backendCall.script} | $dockerRun /bin/bash <&0")
     val process = argv.run(ProcessLogger(stdoutWriter writeWithNewline, stderrTailed writeWithNewline))
 
     // TODO: As currently implemented, this process.destroy() will kill the bash process but *not* its descendants. See ticket DSDEEPB-848.
-    backendCall.callAbortRegistrationFunction.register(AbortFunction(() => process.destroy()))
+    backendCall.callAbortRegistrationFunction.foreach(_.register(AbortFunction(() => process.destroy())))
     val backendCommandString = argv.map(s => "\""+s+"\"").mkString(" ")
     logger.info(s"command: $backendCommandString")
     val processReturnCode = process.exitValue() // blocks until process finishes
@@ -161,7 +192,7 @@ case class LocalBackend(actorSystem: ActorSystem) extends Backend with SharedFil
 
     val stderrFileLength = Try(Files.size(backendCall.stderr)).getOrElse(0L)
     val returnCode = Try(
-      if (processReturnCode == 0 || backendCall.call.docker.isEmpty) {
+      if (processReturnCode == 0 || backendCall.runtimeAttributes.docker.isEmpty) {
         val rc = backendCall.returnCode.contentAsString.stripLineEnd.toInt
         logger.info(s"Return code: $rc")
         rc
@@ -171,7 +202,8 @@ case class LocalBackend(actorSystem: ActorSystem) extends Backend with SharedFil
         throw new Exception(s"Unexpected process exit code: $processReturnCode")
       }
     )
-    if (backendCall.call.failOnStderr && stderrFileLength > 0) {
+
+    if (backendCall.runtimeAttributes.failOnStderr && stderrFileLength > 0) {
       FailedExecution(new Throwable(s"Call ${backendCall.call.fullyQualifiedName}, " +
         s"Workflow ${backendCall.workflowDescriptor.id}: stderr has length $stderrFileLength")).future
     } else {
@@ -193,7 +225,7 @@ case class LocalBackend(actorSystem: ActorSystem) extends Backend with SharedFil
             |${stderrTailed.tailString}
           """.stripMargin
 
-      val continueOnReturnCode = backendCall.call.continueOnReturnCode
+      val continueOnReturnCode = backendCall.runtimeAttributes.continueOnReturnCode
       returnCode match {
         case Success(143) => AbortedExecution.future // Special case to check for SIGTERM exit code - implying abort
         case Success(otherReturnCode) if continueOnReturnCode.continueFor(otherReturnCode) => processSuccess(otherReturnCode)

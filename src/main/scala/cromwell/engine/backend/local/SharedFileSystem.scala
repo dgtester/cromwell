@@ -5,11 +5,9 @@ import java.nio.file.{Files, Path, Paths}
 
 import better.files.{File => ScalaFile, _}
 import com.typesafe.config.ConfigFactory
-import cromwell.binding._
-import cromwell.binding.types.{WdlArrayType, WdlFileType, WdlMapType}
-import cromwell.binding.values.{WdlValue, _}
-import cromwell.engine.ExecutionIndex.ExecutionIndex
-import cromwell.engine.backend.{CallLogs, LocalFileSystemBackendCall, _}
+import cromwell.engine.Hashing._
+import cromwell.engine.backend.runtimeattributes.CromwellRuntimeAttributes
+import cromwell.engine.backend.{AttemptedLookupResult, CallLogs, LocalFileSystemBackendCall, _}
 import cromwell.engine.io.IoInterface
 import cromwell.engine.io.gcs.{GcsPath, GoogleCloudStorage}
 import cromwell.engine.workflow.{CallKey, WorkflowOptions}
@@ -17,12 +15,14 @@ import cromwell.engine.{WorkflowContext, WorkflowDescriptor, WorkflowEngineFunct
 import cromwell.util.TryUtil
 import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
+import wdl4s.types.{WdlArrayType, WdlFileType, WdlMapType}
+import wdl4s.values.{WdlValue, _}
+import wdl4s.{Call, CallInputs, TaskOutput}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
-import Hashing._
 
 object SharedFileSystem {
   type LocalizationStrategy = (String, Path, WorkflowDescriptor) => Try[Unit]
@@ -46,7 +46,7 @@ object SharedFileSystem {
   }).+:(localizeFromGcs _)
 
   private def localizeFromGcs(originalPath: String, executionPath: Path, descriptor: WorkflowDescriptor): Try[Unit] = Try {
-    import cromwell.util.PathUtil._
+    import PathString._
     assert(originalPath.isGcsUrl)
     val content = descriptor.gcsInterface.get.downloadObject(GcsPath(originalPath))
     new ScalaFile(executionPath).createIfNotExists().write(content)
@@ -93,7 +93,6 @@ object SharedFileSystem {
 }
 
 trait SharedFileSystem {
-
   import SharedFileSystem._
 
   def useCachedCall(cachedBackendCall: LocalFileSystemBackendCall, backendCall: LocalFileSystemBackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = Future {
@@ -121,19 +120,12 @@ trait SharedFileSystem {
 
   def postProcess(backendCall: LocalFileSystemBackendCall): Try[CallOutputs] = {
     implicit val hasher = backendCall.workflowDescriptor.fileHasher
-    // Evaluate output expressions, performing conversions from String -> File where required.
-    val outputMappings = backendCall.call.task.outputs map { taskOutput =>
-      val tryConvertedValue =
-        for {
-          expressionValue <- taskOutput.expression.evaluate(backendCall.lookupFunction, backendCall.engineFunctions)
-          convertedValue <- outputAutoConversion(backendCall, taskOutput, expressionValue)
-          pathAdjustedValue <- Success(absolutizeOutputWdlFile(convertedValue, backendCall.callRootPath))
-        } yield pathAdjustedValue
-      taskOutput.name -> tryConvertedValue
-    }
+
+    val outputs = backendCall.call.task.outputs
+    val outputFoldingFunction = getOutputFoldingFunction(backendCall)
+    val outputMappings = outputs.foldLeft(Seq.empty[AttemptedLookupResult])(outputFoldingFunction).map(_.toPair).toMap
 
     val taskOutputFailures = outputMappings filter { _._2.isFailure }
-
     if (taskOutputFailures.isEmpty) {
       val unwrappedMap = outputMappings collect { case (name, Success(wdlValue)) =>
         name -> CallOutput(wdlValue, wdlValue.getHash(backendCall.workflowDescriptor))
@@ -145,15 +137,36 @@ trait SharedFileSystem {
     }
   }
 
+  private def getOutputFoldingFunction(backendCall: LocalFileSystemBackendCall): (Seq[AttemptedLookupResult], TaskOutput) => Seq[AttemptedLookupResult] = {
+    (currentList: Seq[AttemptedLookupResult], taskOutput: TaskOutput) => {
+      currentList ++ Seq(AttemptedLookupResult(taskOutput.name, outputLookup(taskOutput, backendCall, currentList)))
+    }
+  }
+
+  private def outputLookup(taskOutput: TaskOutput, backendCall: LocalFileSystemBackendCall, currentList: Seq[AttemptedLookupResult]) = for {
+    expressionValue <- taskOutput.expression.evaluate(backendCall.lookupFunction(currentList.toLookupMap), backendCall.engineFunctions)
+    convertedValue <- outputAutoConversion(backendCall, taskOutput, expressionValue)
+    pathAdjustedValue <- Success(absolutizeOutputWdlFile(convertedValue, backendCall.callRootPath))
+  } yield pathAdjustedValue
+
   def adjustOutputPaths(call: Call, outputs: CallOutputs): CallOutputs = outputs
 
-  def stdoutStderr(descriptor: WorkflowDescriptor, callName: String, index: ExecutionIndex): CallLogs = {
-    val dir = LocalBackend.hostCallPath(descriptor.namespace.workflow.unqualifiedName, descriptor.id, callName, index)
+  def sharedFileSystemStdoutStderr(backendCall: BackendCall): CallLogs = {
+    val descriptor = backendCall.workflowDescriptor
+    val key = backendCall.key
+    val dir = LocalBackend.hostCallPath(
+      descriptor.namespace.workflow.unqualifiedName,
+      descriptor.id,
+      key.scope.unqualifiedName,
+      key.index
+    )
+
     CallLogs(
       stdout = WdlFile(dir.resolve("stdout").toAbsolutePath.toString),
       stderr = WdlFile(dir.resolve("stderr").toAbsolutePath.toString)
     )
   }
+
   /**
    * Creates host execution directory.
    */
@@ -166,12 +179,17 @@ trait SharedFileSystem {
   /**
    * Return a possibly altered copy of inputs reflecting any localization of input file paths that might have
    * been performed for this `Backend` implementation.
+   * NOTE: This ends up being a backdoor implementation of Backend.adjustInputPaths as both LocalBackend and SgeBackend
+   *    end up with this implementation and thus use it to satisfy their contract with Backend.
+   *    This is yuck-tastic and I consider this a FIXME, but not for this refactor
    */
-  def adjustInputPaths(callKey: CallKey, inputs: CallInputs, workflowDescriptor: WorkflowDescriptor): CallInputs = {
-    import cromwell.util.PathUtil._
+  def adjustInputPaths(callKey: CallKey,
+                       runtimeAttributes: CromwellRuntimeAttributes,
+                       inputs: CallInputs,
+                       workflowDescriptor: WorkflowDescriptor): CallInputs = {
+    import PathString._
 
-    val call = callKey.scope
-    val strategies = if (call.docker.isDefined) DockerLocalizers else Localizers
+    val strategies = if (runtimeAttributes.docker.isDefined) DockerLocalizers else Localizers
 
     def toDockerPath(path: Path): Path = {
       // Host path would look like cromwell-executions/three-step/f00ba4/call-ps/stdout.txt
@@ -189,7 +207,7 @@ trait SharedFileSystem {
      * The new path matches the original path, it only "moves" the root to be the call directory.
      */
     def toCallPath(path: String): Path = {
-      val callDirectory = LocalBackend.hostCallPath(workflowDescriptor, call.unqualifiedName, callKey.index)
+      val callDirectory = LocalBackend.hostCallPath(workflowDescriptor, callKey.scope.unqualifiedName, callKey.index)
       // Concatenate call directory with absolute input path
       val localInputPath = if(path.isGcsUrl) {
         val gcsPath = GcsPath(path)
@@ -201,7 +219,7 @@ trait SharedFileSystem {
     }
 
     // Optional function to adjust the path to "docker path" if the call runs in docker
-    val postProcessor: Option[Path => Path] = call.docker map { _ => toDockerPath _ }
+    val postProcessor: Option[Path => Path] = runtimeAttributes.docker map { _ => toDockerPath _ }
     val localizeFunction = localizeWdlValue(workflowDescriptor, toCallPath, strategies.toStream, postProcessor) _
     val localizedValues = inputs.toSeq map {
       case (name, value) => localizeFunction(value) map { name -> _ }

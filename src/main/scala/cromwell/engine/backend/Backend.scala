@@ -2,23 +2,23 @@ package cromwell.engine.backend
 
 import akka.actor.ActorSystem
 import com.typesafe.config.Config
-import cromwell.binding._
-import cromwell.binding.values.WdlFile
-import cromwell.engine.ExecutionIndex.ExecutionIndex
 import cromwell.engine._
 import cromwell.engine.backend.jes.JesBackend
 import cromwell.engine.backend.local.LocalBackend
+import cromwell.engine.backend.runtimeattributes.CromwellRuntimeAttributes
 import cromwell.engine.backend.sge.SgeBackend
 import cromwell.engine.db.ExecutionDatabaseKey
 import cromwell.engine.io.IoInterface
 import cromwell.engine.workflow.{CallKey, WorkflowOptions}
 import cromwell.logging.WorkflowLogger
-import cromwell.parser.BackendType
 import cromwell.util.docker.SprayDockerRegistryApiClient
 import org.slf4j.LoggerFactory
+import wdl4s._
+import wdl4s.values.WdlValue
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
+import scala.language.postfixOps
+import scala.util.{Success, Try}
 
 object Backend {
   class StdoutStderrException(message: String) extends RuntimeException(message)
@@ -52,6 +52,18 @@ object Backend {
 
 trait JobKey
 
+final case class AttemptedLookupResult(name: String, value: Try[WdlValue]) {
+  def toPair = name -> value
+}
+
+object AttemptedLookupResult {
+  implicit class AugmentedAttemptedLookupSequence(s: Seq[AttemptedLookupResult]) {
+    def toLookupMap: Map[String, WdlValue] = s collect {
+      case AttemptedLookupResult(name, Success(value)) => (name, value)
+    } toMap
+  }
+}
+
 /**
  * Trait to be implemented by concrete backends.
  */
@@ -61,10 +73,23 @@ trait Backend {
   def actorSystem: ActorSystem
 
   /**
+    * Attempt to evaluate all the ${...} tags in a command and return a String representation
+    * of the command.  This could fail for a variety of reasons related to expression evaluation
+    * which is why it returns a Try[String]
+    */
+  def instantiateCommand(backendCall: BackendCall): Try[String] = {
+    val backendInputs = adjustInputPaths(backendCall.key, backendCall.runtimeAttributes, backendCall.locallyQualifiedInputs, backendCall.workflowDescriptor)
+    backendCall.call.instantiateCommandLine(backendInputs, backendCall.engineFunctions)
+  }
+
+  /**
    * Return a possibly altered copy of inputs reflecting any localization of input file paths that might have
    * been performed for this `Backend` implementation.
    */
-  def adjustInputPaths(callKey: CallKey, inputs: CallInputs, workflowDescriptor: WorkflowDescriptor): CallInputs
+  def adjustInputPaths(callKey: CallKey,
+                       runtimeAttributes: CromwellRuntimeAttributes,
+                       inputs: CallInputs,
+                       workflowDescriptor: WorkflowDescriptor): CallInputs
 
   // FIXME: This is never called...
   def adjustOutputPaths(call: Call, outputs: CallOutputs): CallOutputs
@@ -86,8 +111,8 @@ trait Backend {
    */
   def bindCall(workflowDescriptor: WorkflowDescriptor,
                key: CallKey,
-               locallyQualifiedInputs: CallInputs,
-               abortRegistrationFunction: AbortRegistrationFunction): BackendCall
+               locallyQualifiedInputs: CallInputs = Map.empty[String, WdlValue],
+               abortRegistrationFunction: Option[AbortRegistrationFunction] = None): BackendCall
 
   def workflowContext(workflowOptions: WorkflowOptions, workflowId: WorkflowId, name: String): WorkflowContext
 
@@ -99,9 +124,9 @@ trait Backend {
   def prepareForRestart(restartableWorkflow: WorkflowDescriptor)(implicit ec: ExecutionContext): Future[Unit]
 
   /**
-   * Return CallStandardOutput which contains the stdout/stderr of the particular call
+   * Return CallLogs which contains the stdout/stderr of the particular call
    */
-  def stdoutStderr(descriptor: WorkflowDescriptor, callName: String, index: ExecutionIndex): CallLogs
+  def stdoutStderr(backendCall: BackendCall): CallLogs
 
   def backendType: BackendType
 
